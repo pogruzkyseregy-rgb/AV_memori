@@ -29,6 +29,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
@@ -64,6 +65,8 @@ fun FullPhotoView(path: String, onClose: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxSize()
+            // Поверх всех фото россыпи: раскрытое фото закрывает остальные.
+            .zIndex(1000f)
             .background(AvColors.Paper)
             .graphicsLayer {
                 alpha = appear.value
