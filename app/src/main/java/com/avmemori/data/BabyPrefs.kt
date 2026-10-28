@@ -3,6 +3,7 @@ package com.avmemori.data
 import android.content.Context
 import com.avmemori.model.AppMode
 import com.avmemori.model.BackgroundStyle
+import com.avmemori.model.BlockStyle
 
 /** Имя малыша и настройки приложения. */
 object BabyPrefs {
@@ -12,6 +13,7 @@ object BabyPrefs {
     // Старый флаг «анимированный фон вкл/выкл», нужен только для миграции.
     private const val KEY_ANIMATED = "animated_background"
     private const val KEY_MODE = "app_mode"
+    private const val KEY_BLOCK_STYLE = "block_style"
 
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
@@ -31,6 +33,15 @@ object BabyPrefs {
 
     fun setMode(context: Context, mode: AppMode) {
         prefs(context).edit().putString(KEY_MODE, mode.name).apply()
+    }
+
+    fun getBlockStyle(context: Context): BlockStyle {
+        val saved = prefs(context).getString(KEY_BLOCK_STYLE, null)
+        return BlockStyle.values().firstOrNull { it.name == saved } ?: BlockStyle.CLASSIC
+    }
+
+    fun setBlockStyle(context: Context, style: BlockStyle) {
+        prefs(context).edit().putString(KEY_BLOCK_STYLE, style.name).apply()
     }
 
     fun getBackgroundStyle(context: Context): BackgroundStyle {

@@ -32,6 +32,19 @@ import androidx.compose.ui.unit.sp
 import com.avmemori.R
 import com.avmemori.model.AppMode
 import com.avmemori.model.BackgroundStyle
+import com.avmemori.model.BlockStyle
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.layout.Box
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import kotlinx.coroutines.launch
+import kotlin.math.sin
 import com.avmemori.ui.theme.AvColors
 import com.avmemori.ui.theme.BodyFont
 import com.avmemori.ui.theme.NoteFont
@@ -44,9 +57,11 @@ fun SettingsScreen(
     babyName: String,
     style: BackgroundStyle,
     mode: AppMode,
+    blockStyle: BlockStyle,
     onRename: () -> Unit,
     onStyleChange: (BackgroundStyle) -> Unit,
     onModeChange: (AppMode) -> Unit,
+    onBlockStyleChange: (BlockStyle) -> Unit,
     onBack: () -> Unit,
 ) {
     Column(
@@ -119,6 +134,29 @@ fun SettingsScreen(
                 .padding(horizontal = 18.dp, vertical = 14.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            Text(text = "оформление блоков", fontFamily = BodyFont, fontSize = 16.sp, color = AvColors.Ink)
+            Row(
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                BlockStyle.values().forEach { option ->
+                    FilterChip(
+                        selected = option == blockStyle,
+                        onClick = { onBlockStyleChange(option) },
+                        label = { Text(option.title) },
+                    )
+                }
+            }
+        }
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(18.dp))
+                .background(Color.White)
+                .padding(horizontal = 18.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
             Text(text = "анимированный фон", fontFamily = BodyFont, fontSize = 16.sp, color = AvColors.Ink)
             Row(
                 modifier = Modifier.horizontalScroll(rememberScrollState()),
@@ -136,14 +174,48 @@ fun SettingsScreen(
 
         Spacer(modifier = Modifier.size(8.dp))
 
-        Image(
-            painter = painterResource(R.drawable.settings_photo),
-            contentDescription = null,
+        // Нажал или приблизил фото — оно гличит, и на секунду появляется логотип AV.
+        val glitch = remember { Animatable(1f) }
+        val scope = rememberCoroutineScope()
+        val trigger: () -> Unit = {
+            scope.launch {
+                glitch.snapTo(0f)
+                glitch.animateTo(1f, tween(durationMillis = 900, easing = LinearEasing))
+            }
+        }
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(18.dp)),
-            contentScale = ContentScale.FillWidth,
-        )
+                .clip(RoundedCornerShape(18.dp))
+                .pointerInput(Unit) { detectTapGestures(onPress = { trigger() }) }
+                .pointerInput(Unit) {
+                    detectTransformGestures { _, _, zoom, _ -> if (zoom != 1f) trigger() }
+                },
+        ) {
+            val t = glitch.value
+            val k = 1f - t
+            Image(
+                painter = painterResource(R.drawable.settings_photo),
+                contentDescription = null,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .graphicsLayer {
+                        translationX = if (k > 0f) sin(t * 70f) * 12f * k else 0f
+                        alpha = if (k > 0f && sin(t * 110f) > 0.5f) 0.6f else 1f
+                    },
+                contentScale = ContentScale.FillWidth,
+            )
+            Image(
+                painter = painterResource(R.drawable.av_logo),
+                contentDescription = null,
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .fillMaxWidth(0.6f)
+                    .clip(RoundedCornerShape(12.dp))
+                    .graphicsLayer { alpha = logoAlpha(t) },
+                contentScale = ContentScale.Fit,
+            )
+        }
         Text(
             text = "с любовью AV_memori",
             modifier = Modifier.fillMaxWidth(),
@@ -153,6 +225,14 @@ fun SettingsScreen(
             textAlign = TextAlign.Center,
         )
     }
+}
+
+/** Логотип: появляется на вспышке глитча и гаснет к концу. t = 1 — покой. */
+private fun logoAlpha(t: Float): Float = when {
+    t < 0.15f -> t / 0.15f
+    t < 0.7f -> 1f
+    t < 1f -> (1f - t) / 0.3f
+    else -> 0f
 }
 
 @Composable

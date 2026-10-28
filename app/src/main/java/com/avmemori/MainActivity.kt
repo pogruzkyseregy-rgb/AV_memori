@@ -46,6 +46,7 @@ import com.avmemori.data.BlockStore
 import com.avmemori.data.MilestoneStore
 import com.avmemori.data.StickerStore
 import com.avmemori.model.AppMode
+import com.avmemori.model.BlockStyle
 import com.avmemori.model.Block
 import com.avmemori.model.Milestone
 import com.avmemori.model.MilestoneKind
@@ -106,6 +107,7 @@ fun AvApp() {
     var babyName by remember { mutableStateOf(BabyPrefs.getName(context)) }
     var mode by remember { mutableStateOf(BabyPrefs.getMode(context)) }
     val shownMode = mode ?: AppMode.KIDS
+    var blockStyle by remember { mutableStateOf(BabyPrefs.getBlockStyle(context)) }
     var bgStyle by remember { mutableStateOf(BabyPrefs.getBackgroundStyle(context)) }
     var blocks by remember { mutableStateOf(BlockStore.load(context)) }
     var milestones by remember { mutableStateOf(MilestoneStore.load(context)) }
@@ -119,6 +121,7 @@ fun AvApp() {
     var editorOpen by remember { mutableStateOf(false) }
     var editingBlock by remember { mutableStateOf<Block?>(null) }
     var showAddMilestone by remember { mutableStateOf(false) }
+    var editingMilestone by remember { mutableStateOf<Milestone?>(null) }
     // Имя спрашиваем один раз при первом запуске.
     var showName by remember { mutableStateOf(babyName.isBlank()) }
 
@@ -229,6 +232,7 @@ fun AvApp() {
                             library = library,
                             player = player,
                             shakeEvent = shakeCount,
+                            blockStyle = blockStyle,
                             onOpenMedia = { block -> viewer = Viewer(block.media, block.id) },
                             onEdit = { block ->
                                 editingBlock = block
@@ -241,12 +245,20 @@ fun AvApp() {
                         items = shownMilestones,
                         kind = MilestoneKind.EVENT,
                         onOpenMedia = { m -> viewer = Viewer(m.media, m.id, isMilestone = true) },
+                        onEdit = { m ->
+                            editingMilestone = m
+                            showAddMilestone = true
+                        },
                         modifier = Modifier.weight(1f),
                     )
                     AvTab.ACHIEVEMENTS -> MilestonesScreen(
                         items = shownMilestones,
                         kind = MilestoneKind.ACHIEVEMENT,
                         onOpenMedia = { m -> viewer = Viewer(m.media, m.id, isMilestone = true) },
+                        onEdit = { m ->
+                            editingMilestone = m
+                            showAddMilestone = true
+                        },
                         modifier = Modifier.weight(1f),
                     )
                 }
@@ -269,6 +281,11 @@ fun AvApp() {
                 babyName = babyName,
                 style = bgStyle,
                 mode = shownMode,
+                blockStyle = blockStyle,
+                onBlockStyleChange = { style ->
+                    blockStyle = style
+                    BabyPrefs.setBlockStyle(context, style)
+                },
                 onModeChange = { newMode ->
                     mode = newMode
                     BabyPrefs.setMode(context, newMode)
@@ -362,14 +379,32 @@ fun AvApp() {
     }
 
     if (showAddMilestone) {
-        val kind = if (tab == AvTab.ACHIEVEMENTS) MilestoneKind.ACHIEVEMENT else MilestoneKind.EVENT
+        val editing = editingMilestone
+        val kind = editing?.kind ?: if (tab == AvTab.ACHIEVEMENTS) MilestoneKind.ACHIEVEMENT else MilestoneKind.EVENT
         AddMilestoneDialog(
             kind = kind,
-            onDismiss = { showAddMilestone = false },
+            initial = editing,
+            onDismiss = {
+                showAddMilestone = false
+                editingMilestone = null
+            },
+            onDelete = editing?.let { target ->
+                {
+                    milestones = milestones.filter { it.id != target.id }
+                    MilestoneStore.save(context, milestones)
+                    showAddMilestone = false
+                    editingMilestone = null
+                }
+            },
             onSave = { milestone: Milestone ->
-                milestones = listOf(milestone) + milestones
+                milestones = if (milestones.any { it.id == milestone.id }) {
+                    milestones.map { if (it.id == milestone.id) milestone else it }
+                } else {
+                    listOf(milestone) + milestones
+                }
                 MilestoneStore.save(context, milestones)
                 showAddMilestone = false
+                editingMilestone = null
             },
         )
     }

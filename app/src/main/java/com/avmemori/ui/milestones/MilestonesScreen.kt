@@ -29,6 +29,10 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.avmemori.model.Milestone
+import com.avmemori.ui.common.EditIcon
+import com.avmemori.ui.common.IconTap
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
 import com.avmemori.model.MilestoneKind
 import com.avmemori.ui.media.MediaArea
 import com.avmemori.ui.theme.AvColors
@@ -44,6 +48,7 @@ fun MilestonesScreen(
     items: List<Milestone>,
     kind: MilestoneKind,
     onOpenMedia: (Milestone) -> Unit,
+    onEdit: (Milestone) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val list = remember(items, kind) {
@@ -68,7 +73,7 @@ fun MilestonesScreen(
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         itemsIndexed(list, key = { _, m -> m.id }) { index, m ->
-            MilestoneCard(milestone = m, index = index, onOpenMedia = onOpenMedia)
+            MilestoneCard(milestone = m, index = index, onOpenMedia = onOpenMedia, onEdit = onEdit)
         }
     }
 }
@@ -78,6 +83,7 @@ private fun MilestoneCard(
     milestone: Milestone,
     index: Int,
     onOpenMedia: (Milestone) -> Unit,
+    onEdit: (Milestone) -> Unit,
 ) {
     val appear = remember(milestone.id) { Animatable(0f) }
     LaunchedEffect(milestone.id) {
@@ -104,8 +110,15 @@ private fun MilestoneCard(
         shape = RoundedCornerShape(18.dp),
         color = Color(milestone.colorArgb),
         shadowElevation = 2.dp,
+        // Особая рамка: золотистая обводка и тонкая внутренняя линия — для важных моментов.
+        border = BorderStroke(2.dp, AvColors.Accent),
     ) {
-        Column(modifier = Modifier.padding(18.dp)) {
+        Column(
+            modifier = Modifier
+                .padding(10.dp)
+                .border(1.dp, AvColors.Accent.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
+                .padding(12.dp),
+        ) {
             if (milestone.media.isNotEmpty()) {
                 MediaArea(
                     media = milestone.media,
@@ -132,12 +145,20 @@ private fun MilestoneCard(
                     color = AvColors.Ink,
                 )
             }
-            Text(
-                text = date,
-                modifier = Modifier.padding(top = 10.dp),
-                style = MaterialTheme.typography.labelMedium,
-                color = AvColors.InkSoft,
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = date,
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = AvColors.InkSoft,
+                )
+                IconTap(description = "изменить", onClick = { onEdit(milestone) }) { EditIcon() }
+            }
         }
     }
 }

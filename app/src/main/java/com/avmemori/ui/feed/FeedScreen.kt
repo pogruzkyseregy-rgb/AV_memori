@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.avmemori.audio.AudioPlayer
 import com.avmemori.model.Block
+import com.avmemori.model.BlockStyle
 import com.avmemori.model.Sticker
 import com.avmemori.ui.common.EditIcon
 import com.avmemori.ui.common.IconTap
@@ -55,6 +56,13 @@ import com.avmemori.ui.media.StickerLayer
 import com.avmemori.ui.theme.AvColors
 import com.avmemori.ui.theme.NoteFont
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.graphics.Color as ComposeColor
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -68,6 +76,7 @@ fun FeedScreen(
     library: Map<Long, Sticker>,
     player: AudioPlayer,
     shakeEvent: Int,
+    blockStyle: BlockStyle,
     onOpenMedia: (Block) -> Unit,
     onEdit: (Block) -> Unit,
     modifier: Modifier = Modifier,
@@ -77,12 +86,15 @@ fun FeedScreen(
     // Во время прокрутки видео выключено, а выбирается уже когда лента остановилась —
     // так не запускаются и не гасятся плееры на каждом кадре и лента идёт ровно.
     var settledVideoId by remember(blocks) { mutableStateOf<Long?>(null) }
-    LaunchedEffect(listState.isScrollInProgress, blocks) {
-        if (listState.isScrollInProgress) {
-            settledVideoId = null
-        } else {
-            delay(250)
-            settledVideoId = pickActiveVideo(listState.layoutInfo, blocks)
+    // Срабатывает и при первом показе ленты (без прокрутки), и после каждой остановки.
+    LaunchedEffect(listState, blocks) {
+        snapshotFlow { listState.isScrollInProgress }.collectLatest { scrolling ->
+            if (scrolling) {
+                settledVideoId = null
+            } else {
+                delay(250)
+                settledVideoId = pickActiveVideo(listState.layoutInfo, blocks)
+            }
         }
     }
 
@@ -103,6 +115,7 @@ fun FeedScreen(
                 player = player,
                 inlineVideo = block.id == settledVideoId,
                 shakeEvent = shakeEvent,
+                style = blockStyle,
                 onOpenMedia = onOpenMedia,
                 onEdit = onEdit,
             )
@@ -136,11 +149,14 @@ fun BlockCard(
     player: AudioPlayer,
     inlineVideo: Boolean,
     shakeEvent: Int,
+    style: BlockStyle,
     onOpenMedia: (Block) -> Unit,
     onEdit: (Block) -> Unit,
 ) {
     // «Порядок в беспорядке»: наклон фиксируется по id, карточки не прыгают при прокрутке.
-    val tilt = remember(block.id) { ((block.id * 37L) % 7L).toFloat() - 3f }
+    // В стиле «минимал» блоки ровные.
+    val tiltBase = remember(block.id) { ((block.id * 37L) % 7L).toFloat() - 3f }
+    val tilt = if (style == BlockStyle.MINIMAL) 0f else tiltBase
 
     val appear = remember(block.id) { Animatable(0f) }
     LaunchedEffect(block.id) {
@@ -174,6 +190,19 @@ fun BlockCard(
     val context = LocalContext.current
     val inlinePath = if (inlineVideo) block.media.firstOrNull { it.isVideo }?.path else null
 
+    val cardShape = when (style) {
+        BlockStyle.MINIMAL -> RoundedCornerShape(16.dp)
+        BlockStyle.POLAROID -> RoundedCornerShape(3.dp)
+        else -> RoundedCornerShape(6.dp)
+    }
+    val cardColor = if (style == BlockStyle.MINIMAL) AvColors.Paper else Color.White
+    // Полароид: широкие поля снизу, как у фото с подписью.
+    val cardPadding = when (style) {
+        BlockStyle.POLAROID -> PaddingValues(start = 12.dp, top = 12.dp, end = 12.dp, bottom = 22.dp)
+        BlockStyle.MINIMAL -> PaddingValues(4.dp)
+        else -> PaddingValues(8.dp)
+    }
+
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -184,10 +213,11 @@ fun BlockCard(
                 alpha = p
                 translationY = (1f - p) * 24.dp.toPx() + shakeDy
             },
-        shape = RoundedCornerShape(6.dp),
-        color = Color.White,
+        shape = cardShape,
+        color = cardColor,
     ) {
-        Column(modifier = Modifier.padding(8.dp)) {
+        Box(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(cardPadding)) {
             MediaArea(
                 media = block.media,
                 colorArgb = block.colorArgb,
@@ -253,6 +283,19 @@ fun BlockCard(
                 Spacer(modifier = Modifier.width(4.dp))
                 IconTap(description = "изменить", onClick = { onEdit(block) }) { EditIcon() }
             }
+        }
+        if (style == BlockStyle.TAPE) {
+            // Полоска скотча, приклеивающая блок к ленте.
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .offset(y = (-7).dp)
+                    .width(64.dp)
+                    .height(18.dp)
+                    .graphicsLayer { rotationZ = -4f }
+                    .background(ComposeColor(0xCCF3E3B0)),
+            )
+        }
         }
     }
 }

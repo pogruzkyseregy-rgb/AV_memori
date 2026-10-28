@@ -51,17 +51,19 @@ import java.util.Locale
 @Composable
 fun AddMilestoneDialog(
     kind: MilestoneKind,
+    initial: Milestone? = null,
     onDismiss: () -> Unit,
+    onDelete: (() -> Unit)? = null,
     onSave: (Milestone) -> Unit,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    var title by remember { mutableStateOf("") }
-    var note by remember { mutableStateOf("") }
-    var dateMillis by remember { mutableStateOf(System.currentTimeMillis()) }
+    var title by remember { mutableStateOf(initial?.title ?: "") }
+    var note by remember { mutableStateOf(initial?.note ?: "") }
+    var dateMillis by remember { mutableStateOf(initial?.dateMillis ?: System.currentTimeMillis()) }
     var showDate by remember { mutableStateOf(false) }
-    var media by remember { mutableStateOf<List<Media>>(emptyList()) }
+    var media by remember { mutableStateOf<List<Media>>(initial?.media ?: emptyList()) }
 
     val dateLabel = remember(dateMillis) {
         SimpleDateFormat("d MMMM yyyy", Locale.forLanguageTag("ru")).format(Date(dateMillis))
@@ -92,7 +94,11 @@ fun AddMilestoneDialog(
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 Text(
-                    text = if (kind == MilestoneKind.EVENT) "новое событие" else "новое достижение",
+                    text = when {
+                        initial != null -> "изменить"
+                        kind == MilestoneKind.EVENT -> "новое событие"
+                        else -> "новое достижение"
+                    },
                     fontFamily = NoteFont,
                     fontSize = 26.sp,
                     color = AvColors.Ink,
@@ -137,6 +143,11 @@ fun AddMilestoneDialog(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End,
                 ) {
+                    if (onDelete != null) {
+                        TextButton(onClick = onDelete) {
+                            Text("удалить", color = AvColors.InkSoft)
+                        }
+                    }
                     TextButton(onClick = onDismiss) {
                         Text("отмена", color = AvColors.InkSoft)
                     }
@@ -146,12 +157,12 @@ fun AddMilestoneDialog(
                             val now = System.currentTimeMillis()
                             onSave(
                                 Milestone(
-                                    id = now,
+                                    id = initial?.id ?: now,
                                     kind = kind,
                                     title = title.trim(),
                                     note = note.trim(),
                                     dateMillis = dateMillis,
-                                    colorArgb = blockPalette[(now % blockPalette.size).toInt()],
+                                    colorArgb = initial?.colorArgb ?: blockPalette[(now % blockPalette.size).toInt()],
                                     media = media,
                                 ),
                             )
