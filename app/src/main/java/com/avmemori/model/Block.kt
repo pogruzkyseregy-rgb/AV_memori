@@ -1,22 +1,26 @@
 package com.avmemori.model
 
-enum class BlockKind { PHOTO, PHOTO_MUSIC, VOICE, NOTE }
-
+/**
+ * Один момент в ленте. Все вложения необязательны и могут быть в любом сочетании:
+ * фото, музыка, голосовое и подпись.
+ * Файлы копируются во внутреннее хранилище приложения, поэтому работают
+ * на любой версии Android без лишних разрешений.
+ */
 data class Block(
     val id: Long,
-    val kind: BlockKind,
     val note: String,
-    val date: String,
+    val createdAt: Long,
     val colorArgb: Long,
-)
+    val photoPath: String? = null,
+    val musicPath: String? = null,
+    val voicePath: String? = null,
+) {
+    val isEmpty: Boolean
+        get() = note.isBlank() && photoPath == null && musicPath == null && voicePath == null
+}
 
-// Временные демо-данные, пока нет базы (Room добавим на следующем шаге).
-val sampleBlocks = listOf(
-    Block(1, BlockKind.PHOTO, "первая улыбка ☀️", "12 мар", 0xFFF6D5C3),
-    Block(2, BlockKind.VOICE, "первое «мама»", "02 апр", 0xFFD9E4F0),
-    Block(3, BlockKind.PHOTO_MUSIC, "наша любимая песенка", "21 май", 0xFFE8DAF0),
-    Block(4, BlockKind.NOTE, "сегодня он заснул у меня на груди, не двигалась полчаса", "03 июн", 0xFFF3EAD7),
-    Block(5, BlockKind.PHOTO, "первые шаги, держится за диван", "18 сен", 0xFFDDEBDD),
-    Block(6, BlockKind.PHOTO, "в парке, листья", "07 окт", 0xFFF6E3C7),
-    Block(7, BlockKind.VOICE, "смех в ванной", "22 окт", 0xFFD6E8E6),
+// Пастельные цвета для «стикеров» без фото.
+val blockPalette = listOf(
+    0xFFF6D5C3, 0xFFD9E4F0, 0xFFE8DAF0, 0xFFF3EAD7,
+    0xFFDDEBDD, 0xFFF6E3C7, 0xFFD6E8E6,
 )
