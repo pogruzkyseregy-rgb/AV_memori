@@ -1,6 +1,10 @@
 package com.avmemori.ui.scatter
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -41,6 +45,12 @@ import com.avmemori.ui.theme.BodyFont
 fun FullPhotoView(path: String, onClose: () -> Unit) {
     BackHandler(onBack = onClose)
 
+    // Фото «раскрывается» поверх остальных: появляется из чуть меньшего размера.
+    val appear = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        appear.animateTo(1f, spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessMediumLow))
+    }
+
     var scale by remember { mutableFloatStateOf(1f) }
     var rotation by remember { mutableFloatStateOf(0f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
@@ -55,6 +65,12 @@ fun FullPhotoView(path: String, onClose: () -> Unit) {
         modifier = Modifier
             .fillMaxSize()
             .background(AvColors.Paper)
+            .graphicsLayer {
+                alpha = appear.value
+                val s = 0.85f + 0.15f * appear.value
+                scaleX = s
+                scaleY = s
+            }
             .pointerInput(Unit) {
                 detectTransformGestures { _, pan, zoom, rot ->
                     scale = (scale * zoom).coerceIn(1f, 5f)

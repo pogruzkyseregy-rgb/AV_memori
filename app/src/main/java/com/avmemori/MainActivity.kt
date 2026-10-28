@@ -4,7 +4,6 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -16,24 +15,26 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
@@ -45,7 +46,9 @@ import com.avmemori.data.BlockStore
 import com.avmemori.data.MilestoneStore
 import com.avmemori.data.StickerStore
 import com.avmemori.model.Block
+import com.avmemori.model.Milestone
 import com.avmemori.model.MilestoneKind
+import com.avmemori.sensor.ShakeDetector
 import com.avmemori.ui.add.AddMilestoneDialog
 import com.avmemori.ui.background.AnimatedBackground
 import com.avmemori.ui.common.NameDialog
@@ -55,12 +58,14 @@ import com.avmemori.ui.milestones.MilestonesScreen
 import com.avmemori.ui.scatter.PhotoScatter
 import com.avmemori.ui.scatter.Viewer
 import com.avmemori.ui.settings.SettingsScreen
+import com.avmemori.ui.shake.ShakeConfetti
 import com.avmemori.ui.stickers.StickersScreen
 import com.avmemori.ui.theme.AvColors
 import com.avmemori.ui.theme.AvTheme
 import com.avmemori.ui.theme.BodyFont
 import com.avmemori.ui.theme.NoteFont
 import com.avmemori.ui.video.VideoPlayer
+import com.avmemori.util.Search
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -106,6 +111,23 @@ fun AvApp() {
     // Имя спрашиваем один раз при первом запуске.
     var showName by remember { mutableStateOf(babyName.isBlank()) }
 
+    // Поиск: строка открывается по кнопке «поиск» в шапке.
+    var searchOpen by remember { mutableStateOf(false) }
+    var query by remember { mutableStateOf("") }
+
+    // Встряхивание: каждое срабатывание увеличивает счётчик.
+    var shakeCount by remember { mutableIntStateOf(0) }
+    val canShake = screen == Screen.MAIN && tab == AvTab.FEED && viewer == null &&
+        videoPath == null && !editorOpen && !showAddMilestone && !showName
+    val canShakeNow by rememberUpdatedState(canShake)
+    DisposableEffect(Unit) {
+        val detector = ShakeDetector(context) {
+            if (canShakeNow) shakeCount++
+        }
+        detector.start()
+        onDispose { detector.stop() }
+    }
+
     // Звук останавливается, когда приложение уходит с экрана или закрывается.
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -124,6 +146,26 @@ fun AvApp() {
         screen = Screen.MAIN
     }
 
+    // Результаты поиска. Пустой запрос — всё.
+    val trimmedQuery = query.trim()
+    val shownBlocks = remember(blocks, trimmedQuery) {
+        if (trimmedQuery.isEmpty()) {
+            blocks
+        } else {
+            blocks.filter { Search.matches(trimmedQuery, listOf(it.note) + Search.dateTexts(it.createdAt)) }
+        }
+    }
+    val shownMilestones = remember(milestones, trimmedQuery) {
+        if (trimmedQuery.isEmpty()) {
+            milestones
+        } else {
+            milestones.filter {
+                Search.matches(trimmedQuery, listOf(it.title, it.note) + Search.dateTexts(it.dateMillis))
+            }
+        }
+    }
+    val allMedia = remember(blocks) { blocks.flatMap { it.media } }
+
     fun saveBlocks() = BlockStore.save(context, blocks)
 
     fun deleteEditing() {
@@ -141,17 +183,40 @@ fun AvApp() {
                 Header(
                     name = babyName,
                     onNameClick = { showName = true },
+                    onSearch = {
+                        searchOpen = !searchOpen
+                        if (!searchOpen) query = ""
+                    },
                     onStickers = { screen = Screen.STICKERS },
                     onSettings = { screen = Screen.SETTINGS },
                 )
+
+                if (searchOpen) {
+                    OutlinedTextField(
+                        value = query,
+                        onValueChange = { query = it.take(60) },
+                        placeholder = { Text("что вспомнить?", fontFamily = BodyFont) },
+                        singleLine = true,
+                        shape = RoundedCornerShape(50),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 4.dp),
+                        textStyle = TextStyle(fontFamily = BodyFont, fontSize = 16.sp),
+                    )
+                }
+
                 when (tab) {
-                    AvTab.FEED -> if (blocks.isEmpty()) {
-                        EmptyHint(modifier = Modifier.weight(1f))
-                    } else {
-                        FeedScreen(
-                            blocks = blocks,
+                    AvTab.FEED -> when {
+                        blocks.isEmpty() -> EmptyHint(modifier = Modifier.weight(1f))
+                        shownBlocks.isEmpty() -> EmptyHint(
+                            modifier = Modifier.weight(1f),
+                            text = "ничего не нашлось ✿",
+                        )
+                        else -> FeedScreen(
+                            blocks = shownBlocks,
                             library = library,
                             player = player,
+                            shakeEvent = shakeCount,
                             onOpenMedia = { block -> viewer = Viewer(block.media, block.id) },
                             onEdit = { block ->
                                 editingBlock = block
@@ -161,13 +226,13 @@ fun AvApp() {
                         )
                     }
                     AvTab.EVENTS -> MilestonesScreen(
-                        items = milestones,
+                        items = shownMilestones,
                         kind = MilestoneKind.EVENT,
                         onOpenMedia = { m -> viewer = Viewer(m.media, m.id) },
                         modifier = Modifier.weight(1f),
                     )
                     AvTab.ACHIEVEMENTS -> MilestonesScreen(
-                        items = milestones,
+                        items = shownMilestones,
                         kind = MilestoneKind.ACHIEVEMENT,
                         onOpenMedia = { m -> viewer = Viewer(m.media, m.id) },
                         modifier = Modifier.weight(1f),
@@ -231,6 +296,9 @@ fun AvApp() {
             }
         }
 
+        // Снимки, вылетающие при встряхивании.
+        ShakeConfetti(media = allMedia, trigger = shakeCount)
+
         // Разлёт фото и видео поверх всего.
         viewer?.let { v ->
             PhotoScatter(
@@ -269,7 +337,7 @@ fun AvApp() {
         AddMilestoneDialog(
             kind = kind,
             onDismiss = { showAddMilestone = false },
-            onSave = { milestone ->
+            onSave = { milestone: Milestone ->
                 milestones = listOf(milestone) + milestones
                 MilestoneStore.save(context, milestones)
                 showAddMilestone = false
@@ -294,6 +362,7 @@ fun AvApp() {
 private fun Header(
     name: String,
     onNameClick: () -> Unit,
+    onSearch: () -> Unit,
     onStickers: () -> Unit,
     onSettings: () -> Unit,
 ) {
@@ -322,6 +391,8 @@ private fun Header(
                 color = AvColors.InkSoft,
             )
         }
+        Pill(label = "поиск", onClick = onSearch)
+        Spacer(modifier = Modifier.width(8.dp))
         Pill(label = "стикеры", onClick = onStickers)
         Spacer(modifier = Modifier.width(8.dp))
         Pill(label = "⚙", onClick = onSettings)
@@ -342,10 +413,13 @@ private fun Pill(label: String, onClick: () -> Unit) {
 }
 
 @Composable
-private fun EmptyHint(modifier: Modifier = Modifier) {
+private fun EmptyHint(
+    modifier: Modifier = Modifier,
+    text: String = "пока пусто,\nдобавь первый момент ✿",
+) {
     Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Text(
-            text = "пока пусто,\nдобавь первый момент ✿",
+            text = text,
             fontFamily = NoteFont,
             fontSize = 22.sp,
             color = AvColors.InkSoft,

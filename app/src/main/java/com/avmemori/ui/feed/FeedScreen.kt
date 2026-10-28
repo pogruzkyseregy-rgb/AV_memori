@@ -1,8 +1,10 @@
 package com.avmemori.ui.feed
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -12,9 +14,11 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridLayoutInfo
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.itemsIndexed
+import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.FilterChip
@@ -23,12 +27,17 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.avmemori.audio.AudioPlayer
@@ -42,6 +51,8 @@ import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.PI
+import kotlin.math.sin
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -49,12 +60,20 @@ fun FeedScreen(
     blocks: List<Block>,
     library: Map<Long, Sticker>,
     player: AudioPlayer,
+    shakeEvent: Int,
     onOpenMedia: (Block) -> Unit,
     onEdit: (Block) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val listState = rememberLazyStaggeredGridState()
+    // Видео играет только в одном блоке: том, который сильнее всего виден на экране.
+    val activeVideoId by remember(blocks) {
+        derivedStateOf { pickActiveVideo(listState.layoutInfo, blocks) }
+    }
+
     LazyVerticalStaggeredGrid(
         columns = StaggeredGridCells.Fixed(2),
+        state = listState,
         modifier = modifier,
         // Большой отступ снизу, чтобы кнопки не закрывали последние блоки.
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 130.dp),
@@ -67,11 +86,31 @@ fun FeedScreen(
                 index = index,
                 library = library,
                 player = player,
+                inlineVideo = block.id == activeVideoId,
+                shakeEvent = shakeEvent,
                 onOpenMedia = onOpenMedia,
                 onEdit = onEdit,
             )
         }
     }
+}
+
+/** Блок с видео, который сильнее всего виден в окне ленты (или null). */
+private fun pickActiveVideo(info: LazyStaggeredGridLayoutInfo, blocks: List<Block>): Long? {
+    val start = info.viewportStartOffset
+    val end = info.viewportEndOffset
+    var best: Long? = null
+    var bestVisible = 0
+    for (item in info.visibleItemsInfo) {
+        val block = blocks.getOrNull(item.index) ?: continue
+        if (block.media.none { it.isVideo }) continue
+        val visible = minOf(item.offset.y + item.size.height, end) - maxOf(item.offset.y, start)
+        if (visible > bestVisible) {
+            bestVisible = visible
+            best = block.id
+        }
+    }
+    return best
 }
 
 @Composable
@@ -80,6 +119,8 @@ fun BlockCard(
     index: Int,
     library: Map<Long, Sticker>,
     player: AudioPlayer,
+    inlineVideo: Boolean,
+    shakeEvent: Int,
     onOpenMedia: (Block) -> Unit,
     onEdit: (Block) -> Unit,
 ) {
@@ -95,21 +136,37 @@ fun BlockCard(
         )
     }
 
+    // Встряхивание: 1 — покой, 0→1 — дрожь, падение и возврат вверх.
+    val shake = remember(block.id) { Animatable(1f) }
+    var handled by remember(block.id) { mutableIntStateOf(shakeEvent) }
+    LaunchedEffect(shakeEvent) {
+        if (shakeEvent != handled) {
+            handled = shakeEvent
+            shake.snapTo(0f)
+            shake.animateTo(1f, tween(durationMillis = 1500, easing = LinearEasing))
+        }
+    }
+    val density = LocalDensity.current
+    // Разная высота падения, чтобы блоки не падали синхронно.
+    val fallPx = with(density) { 180.dp.toPx() } * (0.8f + (block.id % 4).toFloat() * 0.1f)
+
     val date = remember(block.createdAt) {
         SimpleDateFormat("d MMM", Locale.forLanguageTag("ru")).format(Date(block.createdAt))
     }
     val musicKey = "music-${block.id}"
     val voiceKey = "voice-${block.id}"
     val open: () -> Unit = { onOpenMedia(block) }
+    val inlinePath = if (inlineVideo) block.media.firstOrNull { it.isVideo }?.path else null
 
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .graphicsLayer {
                 val p = appear.value
-                rotationZ = tilt * p
+                val (shakeRot, shakeDy) = shakeFrame(shake.value, fallPx)
+                rotationZ = tilt * p + shakeRot
                 alpha = p
-                translationY = (1f - p) * 24.dp.toPx()
+                translationY = (1f - p) * 24.dp.toPx() + shakeDy
             },
         shape = RoundedCornerShape(6.dp),
         color = Color.White,
@@ -120,6 +177,7 @@ fun BlockCard(
                 media = block.media,
                 colorArgb = block.colorArgb,
                 onOpen = if (block.media.isEmpty()) null else open,
+                inlineVideoPath = inlinePath,
                 overlay = { StickerLayer(placed = block.stickers, library = library) },
             )
 
@@ -186,4 +244,31 @@ fun BlockCard(
             }
         }
     }
+}
+
+/**
+ * Смещение блока при встряхивании: (поворот в градусах, сдвиг по Y в пикселях).
+ * Сначала дрожь, потом падение вниз, потом взлёт вверх с перелётом и возврат.
+ */
+private fun shakeFrame(t: Float, fallPx: Float): Pair<Float, Float> = when {
+    t < 0.25f -> {
+        val k = t / 0.25f
+        Pair(sin(k * 6f * PI.toFloat()) * 9f * (1f - k), 0f)
+    }
+    t < 0.5f -> {
+        val k = (t - 0.25f) / 0.25f
+        Pair(0f, fallPx * k * k)
+    }
+    t < 0.8f -> {
+        val k = (t - 0.5f) / 0.3f
+        Pair(0f, fallPx * (1f - easeOutBack(k)))
+    }
+    else -> Pair(0f, 0f)
+}
+
+private fun easeOutBack(x: Float): Float {
+    val c1 = 1.70158f
+    val c3 = c1 + 1f
+    val d = x - 1f
+    return 1f + c3 * d * d * d + c1 * d * d
 }

@@ -42,6 +42,13 @@ import com.avmemori.model.Sticker
 import com.avmemori.ui.feed.LocalPhoto
 import com.avmemori.ui.theme.AvColors
 import kotlin.math.roundToInt
+import android.widget.VideoView
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 
 /** Картинка для показа: у видео это кадр-превью, у фото — сам файл. */
 fun thumbPathOf(media: Media): String = media.thumbPath ?: media.path
@@ -80,10 +87,12 @@ fun MediaArea(
     media: List<Media>,
     colorArgb: Long,
     onOpen: (() -> Unit)? = null,
+    inlineVideoPath: String? = null,
     overlay: @Composable BoxScope.() -> Unit = {},
 ) {
     Box(modifier = Modifier.fillMaxWidth()) {
         when {
+            inlineVideoPath != null -> InlineVideoArea(path = inlineVideoPath, onOpen = onOpen)
             media.isEmpty() -> Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -101,6 +110,62 @@ fun MediaArea(
         }
         overlay()
     }
+}
+
+/** Видео, которое играет прямо в блоке, пока блок на экране. Звук включён. */
+@Composable
+fun InlineVideoArea(path: String, onOpen: (() -> Unit)?) {
+    Box(modifier = Modifier.fillMaxWidth()) {
+        InlineVideo(path = path, modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)))
+        if (onOpen != null) {
+            Text(
+                text = "открыть",
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(6.dp)
+                    .clip(CircleShape)
+                    .background(Color.White.copy(alpha = 0.9f))
+                    .clickable { onOpen() }
+                    .padding(horizontal = 8.dp, vertical = 2.dp),
+                fontSize = 11.sp,
+                color = AvColors.Ink,
+            )
+        }
+    }
+}
+
+/** Встроенный проигрыватель: создаётся, пока блок активен, и освобождается при уходе. */
+@Composable
+fun InlineVideo(path: String, modifier: Modifier = Modifier) {
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val holder = remember { arrayOfNulls<VideoView>(1) }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) holder[0]?.stopPlayback()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            holder[0]?.stopPlayback()
+            holder[0] = null
+        }
+    }
+
+    AndroidView(
+        modifier = modifier.heightIn(max = 420.dp),
+        factory = { ctx ->
+            VideoView(ctx).also { view ->
+                holder[0] = view
+                view.setVideoPath(path)
+                view.setOnPreparedListener { player ->
+                    player.isLooping = true
+                    view.start()
+                }
+            }
+        },
+        onRelease = { view -> view.stopPlayback() },
+    )
 }
 
 /** Несколько фото или видео: стопка из двух, с бейджем количества. */
