@@ -16,7 +16,7 @@ class VoiceRecorder(private val context: Context) {
 
     /** true, если запись началась. */
     fun start(): Boolean {
-        val file = MediaStorage.newFile(context, "voice", "m4a")
+        val file = MediaStorage.newFile(context, "m4a")
         val r = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             MediaRecorder(context)
         } else {

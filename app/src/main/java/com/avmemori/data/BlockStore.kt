@@ -2,6 +2,7 @@ package com.avmemori.data
 
 import android.content.Context
 import com.avmemori.model.Block
+import com.avmemori.model.Media
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -32,19 +33,20 @@ object BlockStore {
         put("note", note)
         put("createdAt", createdAt)
         put("colorArgb", colorArgb)
-        put("photos", JSONArray(photos))
+        put("media", JSONArray(media.map { it.toJson() }))
+        put("stickers", JSONArray(stickers.map { it.toJson() }))
         musicPath?.let { put("musicPath", it) }
         voicePath?.let { put("voicePath", it) }
     }
 
     private fun JSONObject.toBlock(): Block {
-        val photos = when {
-            has("photos") -> {
-                val arr = getJSONArray("photos")
-                List(arr.length()) { arr.getString(it) }
+        val media: List<Media> = when {
+            has("media") -> getJSONArray("media").toMediaList()
+            // Миграция: раньше фото хранились строками.
+            has("photos") -> getJSONArray("photos").let { arr ->
+                List(arr.length()) { Media(path = arr.getString(it)) }
             }
-            // Миграция со старой версии, где было одно фото.
-            optStringOrNull("photoPath") != null -> listOf(optStringOrNull("photoPath")!!)
+            optStr("photoPath") != null -> listOf(Media(path = optStr("photoPath")!!))
             else -> emptyList()
         }
         return Block(
@@ -52,12 +54,10 @@ object BlockStore {
             note = optString("note", ""),
             createdAt = getLong("createdAt"),
             colorArgb = getLong("colorArgb"),
-            photos = photos,
-            musicPath = optStringOrNull("musicPath"),
-            voicePath = optStringOrNull("voicePath"),
+            media = media,
+            stickers = if (has("stickers")) getJSONArray("stickers").toPlacedStickerList() else emptyList(),
+            musicPath = optStr("musicPath"),
+            voicePath = optStr("voicePath"),
         )
     }
-
-    private fun JSONObject.optStringOrNull(key: String): String? =
-        if (has(key) && !isNull(key)) getString(key) else null
 }

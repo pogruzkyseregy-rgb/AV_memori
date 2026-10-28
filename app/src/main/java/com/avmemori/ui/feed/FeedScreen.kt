@@ -4,7 +4,6 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,7 +11,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
@@ -35,6 +33,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.avmemori.audio.AudioPlayer
 import com.avmemori.model.Block
+import com.avmemori.model.Sticker
+import com.avmemori.ui.media.MediaArea
+import com.avmemori.ui.media.StickerLayer
 import com.avmemori.ui.theme.AvColors
 import com.avmemori.ui.theme.NoteFont
 import kotlinx.coroutines.delay
@@ -46,20 +47,29 @@ import java.util.Locale
 @Composable
 fun FeedScreen(
     blocks: List<Block>,
+    library: Map<Long, Sticker>,
     player: AudioPlayer,
-    onOpenPhotos: (Block) -> Unit,
+    onOpenMedia: (Block) -> Unit,
+    onEdit: (Block) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     LazyVerticalStaggeredGrid(
         columns = StaggeredGridCells.Fixed(2),
         modifier = modifier,
-        // Большой отступ снизу, чтобы нижние кнопки не закрывали последние блоки.
+        // Большой отступ снизу, чтобы кнопки не закрывали последние блоки.
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 130.dp),
         verticalItemSpacing = 16.dp,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         itemsIndexed(blocks, key = { _, block -> block.id }) { index, block ->
-            BlockCard(block = block, index = index, player = player, onOpenPhotos = onOpenPhotos)
+            BlockCard(
+                block = block,
+                index = index,
+                library = library,
+                player = player,
+                onOpenMedia = onOpenMedia,
+                onEdit = onEdit,
+            )
         }
     }
 }
@@ -68,8 +78,10 @@ fun FeedScreen(
 fun BlockCard(
     block: Block,
     index: Int,
+    library: Map<Long, Sticker>,
     player: AudioPlayer,
-    onOpenPhotos: (Block) -> Unit,
+    onOpenMedia: (Block) -> Unit,
+    onEdit: (Block) -> Unit,
 ) {
     // «Порядок в беспорядке»: наклон фиксируется по id, карточки не прыгают при прокрутке.
     val tilt = remember(block.id) { ((block.id * 37L) % 7L).toFloat() - 3f }
@@ -88,6 +100,7 @@ fun BlockCard(
     }
     val musicKey = "music-${block.id}"
     val voiceKey = "voice-${block.id}"
+    val open: () -> Unit = { onOpenMedia(block) }
 
     Surface(
         modifier = Modifier
@@ -103,23 +116,12 @@ fun BlockCard(
         shadowElevation = 3.dp,
     ) {
         Column(modifier = Modifier.padding(8.dp)) {
-            val photos = block.photos
-            when {
-                photos.isEmpty() -> Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(44.dp)
-                        .background(Color(block.colorArgb), RoundedCornerShape(4.dp)),
-                )
-                photos.size == 1 -> LocalPhoto(
-                    path = photos.first(),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(4.dp))
-                        .clickable { onOpenPhotos(block) },
-                )
-                else -> PhotoPile(photos = photos, onClick = { onOpenPhotos(block) })
-            }
+            MediaArea(
+                media = block.media,
+                colorArgb = block.colorArgb,
+                onOpen = if (block.media.isEmpty()) null else open,
+                overlay = { StickerLayer(placed = block.stickers, library = library) },
+            )
 
             if (block.note.isNotBlank()) {
                 Text(
@@ -160,51 +162,28 @@ fun BlockCard(
                 }
             }
 
-            Text(
-                text = date,
-                modifier = Modifier.padding(start = 4.dp, top = 6.dp, bottom = 2.dp),
-                style = MaterialTheme.typography.labelSmall,
-                color = AvColors.InkSoft,
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 4.dp, end = 4.dp, top = 6.dp, bottom = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = date,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = AvColors.InkSoft,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    text = "изменить",
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .clickable { onEdit(block) }
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = AvColors.InkSoft,
+                )
+            }
         }
-    }
-}
-
-/** Несколько фото в одном блоке: стопка из двух, с бейджем количества. */
-@Composable
-private fun PhotoPile(photos: List<String>, onClick: () -> Unit) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(bottom = 6.dp, end = 6.dp),
-    ) {
-        LocalPhoto(
-            path = photos[1],
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .fillMaxWidth(0.9f)
-                .graphicsLayer { rotationZ = 4f }
-                .clip(RoundedCornerShape(4.dp)),
-        )
-        LocalPhoto(
-            path = photos[0],
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .fillMaxWidth(0.9f)
-                .graphicsLayer { rotationZ = -3f }
-                .clip(RoundedCornerShape(4.dp)),
-        )
-        Text(
-            text = "${photos.size} фото",
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(4.dp)
-                .clip(CircleShape)
-                .background(Color.White.copy(alpha = 0.9f))
-                .padding(horizontal = 8.dp, vertical = 2.dp),
-            style = MaterialTheme.typography.labelSmall,
-            color = AvColors.Ink,
-        )
     }
 }

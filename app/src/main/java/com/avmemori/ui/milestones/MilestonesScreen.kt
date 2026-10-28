@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.avmemori.model.Milestone
 import com.avmemori.model.MilestoneKind
+import com.avmemori.ui.media.MediaArea
 import com.avmemori.ui.theme.AvColors
 import com.avmemori.ui.theme.NoteFont
 import kotlinx.coroutines.delay
@@ -42,6 +43,7 @@ import java.util.Locale
 fun MilestonesScreen(
     items: List<Milestone>,
     kind: MilestoneKind,
+    onOpenMedia: (Milestone) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val list = remember(items, kind) {
@@ -66,13 +68,17 @@ fun MilestonesScreen(
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         itemsIndexed(list, key = { _, m -> m.id }) { index, m ->
-            MilestoneCard(milestone = m, index = index)
+            MilestoneCard(milestone = m, index = index, onOpenMedia = onOpenMedia)
         }
     }
 }
 
 @Composable
-private fun MilestoneCard(milestone: Milestone, index: Int) {
+private fun MilestoneCard(
+    milestone: Milestone,
+    index: Int,
+    onOpenMedia: (Milestone) -> Unit,
+) {
     val appear = remember(milestone.id) { Animatable(0f) }
     LaunchedEffect(milestone.id) {
         delay(index.coerceAtMost(8) * 70L)
@@ -100,6 +106,14 @@ private fun MilestoneCard(milestone: Milestone, index: Int) {
         shadowElevation = 2.dp,
     ) {
         Column(modifier = Modifier.padding(18.dp)) {
+            if (milestone.media.isNotEmpty()) {
+                MediaArea(
+                    media = milestone.media,
+                    colorArgb = milestone.colorArgb,
+                    onOpen = { onOpenMedia(milestone) },
+                )
+                Spacer(modifier = Modifier.padding(top = 10.dp))
+            }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(text = glyph, fontSize = 22.sp, color = AvColors.Ink)
                 Spacer(modifier = Modifier.width(10.dp))

@@ -35,6 +35,7 @@ object MilestoneStore {
         put("note", note)
         put("dateMillis", dateMillis)
         put("colorArgb", colorArgb)
+        put("media", JSONArray(media.map { it.toJson() }))
     }
 
     private fun JSONObject.toMilestone(): Milestone = Milestone(
@@ -44,5 +45,6 @@ object MilestoneStore {
         note = optString("note", ""),
         dateMillis = getLong("dateMillis"),
         colorArgb = getLong("colorArgb"),
+        media = if (has("media")) getJSONArray("media").toMediaList() else emptyList(),
     )
 }

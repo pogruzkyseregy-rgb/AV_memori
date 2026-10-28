@@ -1,22 +1,22 @@
 package com.avmemori.model
 
 /**
- * Один момент в ленте. Все вложения необязательны и могут быть в любом сочетании.
- * В одном блоке может быть несколько фото: в ленте они лежат стопкой,
- * по нажатию разлетаются по экрану.
- * Файлы копируются во внутреннее хранилище приложения.
+ * Один момент в ленте. Все вложения необязательны и могут быть в любом сочетании:
+ * фото и видео, стикеры, музыка, голосовое и подпись.
  */
 data class Block(
     val id: Long,
     val note: String,
     val createdAt: Long,
     val colorArgb: Long,
-    val photos: List<String> = emptyList(),
+    val media: List<Media> = emptyList(),
+    val stickers: List<PlacedSticker> = emptyList(),
     val musicPath: String? = null,
     val voicePath: String? = null,
 ) {
     val isEmpty: Boolean
-        get() = note.isBlank() && photos.isEmpty() && musicPath == null && voicePath == null
+        get() = note.isBlank() && media.isEmpty() && stickers.isEmpty() &&
+            musicPath == null && voicePath == null
 }
 
 // Пастельные цвета для «стикеров» и карточек событий.

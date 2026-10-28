@@ -6,17 +6,16 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -40,28 +39,35 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.avmemori.model.Media
 import com.avmemori.ui.feed.LocalPhoto
+import com.avmemori.ui.media.VideoBadge
+import com.avmemori.ui.media.thumbPathOf
 import com.avmemori.ui.theme.AvColors
 import com.avmemori.ui.theme.NoteFont
 import kotlin.math.roundToInt
 import kotlin.random.Random
 
+/** Что показываем в разлёте: медиа блока или момента и зерно случайности. */
+data class Viewer(val media: List<Media>, val seed: Long)
+
 /**
- * Фото из блока разлетаются по экрану, их можно таскать пальцем.
- * Закрывается крестиком или кнопкой «назад».
+ * Фото и видео из блока разлетаются по экрану, их можно таскать пальцем.
+ * Тап по видео открывает проигрыватель. Закрывается крестиком или «назад».
  */
 @Composable
 fun PhotoScatter(
-    photos: List<String>,
+    media: List<Media>,
     seed: Long,
     onClose: () -> Unit,
+    onOpenVideo: (Media) -> Unit,
 ) {
     BackHandler(onBack = onClose)
 
     val density = LocalDensity.current
     var areaPx by remember { mutableStateOf(IntSize.Zero) }
 
-    // Анимация «разлёта» от центра: 0 — все фото в стопке, 1 — разбросаны.
+    // Анимация «разлёта» от центра: 0 — все в стопке, 1 — разбросаны.
     val progress = remember(seed) { Animatable(0f) }
     // Целевые позиции (px), углы и порядок отрисовки (последний — сверху).
     val targets = remember(seed) { mutableStateListOf<Offset>() }
@@ -78,7 +84,7 @@ fun PhotoScatter(
         val rnd = Random(seed)
         val maxX = (areaPx.width - itemWidthPx).coerceAtLeast(0f)
         val maxY = (areaPx.height - topMarginPx - bottomMarginPx - itemHeightPx).coerceAtLeast(0f)
-        photos.indices.forEach { i ->
+        media.indices.forEach { i ->
             targets.add(Offset(rnd.nextFloat() * maxX, topMarginPx + rnd.nextFloat() * maxY))
             angles.add(rnd.nextFloat() * 24f - 12f)
             order.add(i)
@@ -92,7 +98,7 @@ fun PhotoScatter(
             .background(AvColors.Paper.copy(alpha = 0.97f))
             .onSizeChanged { areaPx = it },
     ) {
-        if (targets.size == photos.size && areaPx != IntSize.Zero) {
+        if (targets.size == media.size && areaPx != IntSize.Zero) {
             val t = progress.value
             val startX = (areaPx.width - itemWidthPx) / 2f
             val startY = (areaPx.height - itemHeightPx) / 2f
@@ -103,6 +109,7 @@ fun PhotoScatter(
                 val target = targets[i]
                 val x = startX + (target.x - startX) * t
                 val y = startY + (target.y - startY) * t
+                val item = media[i]
                 Surface(
                     modifier = Modifier
                         .offset { IntOffset(x.roundToInt(), y.roundToInt()) }
@@ -119,17 +126,19 @@ fun PhotoScatter(
                                     targets[i] = targets[i] + drag
                                 },
                             )
-                        },
+                        }
+                        .clickable(enabled = item.isVideo) { onOpenVideo(item) },
                     shape = RoundedCornerShape(4.dp),
                     color = Color.White,
                     shadowElevation = 8.dp,
                 ) {
                     Box(modifier = Modifier.padding(8.dp).fillMaxSize()) {
                         LocalPhoto(
-                            path = photos[i],
+                            path = thumbPathOf(item),
                             modifier = Modifier.fillMaxSize(),
                             contentScale = ContentScale.Crop,
                         )
+                        if (item.isVideo) VideoBadge(Modifier.align(Alignment.Center))
                     }
                 }
             }
@@ -151,7 +160,7 @@ fun PhotoScatter(
         }
 
         Text(
-            text = "тяни фото, как хочешь",
+            text = "тяни, как хочешь",
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .navigationBarsPadding()

@@ -7,6 +7,8 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -27,12 +29,22 @@ private val blobColors = listOf(
     Color(0xFFF6E3C7), // песочный
 )
 
+/** Фон. enabled = false — спокойный однотонный, без анимации (экономит батарею). */
+@Composable
+fun AnimatedBackground(modifier: Modifier = Modifier, enabled: Boolean = true) {
+    if (enabled) {
+        AnimatedBlobs(modifier)
+    } else {
+        Box(modifier = modifier.fillMaxSize().background(AvColors.Paper))
+    }
+}
+
 /**
  * Медленно дрейфующие цветные пятна и мерцающие точки.
  * Цикл 60 секунд, перерисовка только в фазе отрисовки (без перекомпоновки).
  */
 @Composable
-fun AnimatedBackground(modifier: Modifier = Modifier) {
+private fun AnimatedBlobs(modifier: Modifier) {
     val transition = rememberInfiniteTransition(label = "background")
     val phase by transition.animateFloat(
         initialValue = 0f,

@@ -1,5 +1,8 @@
 package com.avmemori.ui.add
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -20,23 +23,30 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.avmemori.data.MediaStorage
+import com.avmemori.model.Media
 import com.avmemori.model.Milestone
 import com.avmemori.model.MilestoneKind
 import com.avmemori.model.blockPalette
 import com.avmemori.ui.theme.AvColors
 import com.avmemori.ui.theme.NoteFont
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/** Добавление события или достижения: название, заметка и дата. */
+/** Добавление события или достижения: название, заметка, дата и фото/видео. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddMilestoneDialog(
@@ -44,13 +54,26 @@ fun AddMilestoneDialog(
     onDismiss: () -> Unit,
     onSave: (Milestone) -> Unit,
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
     var title by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
     var dateMillis by remember { mutableStateOf(System.currentTimeMillis()) }
     var showDate by remember { mutableStateOf(false) }
+    var media by remember { mutableStateOf<List<Media>>(emptyList()) }
 
     val dateLabel = remember(dateMillis) {
         SimpleDateFormat("d MMMM yyyy", Locale.forLanguageTag("ru")).format(Date(dateMillis))
+    }
+
+    val mediaPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickMultipleVisualMedia(maxItems = 20),
+    ) { uris ->
+        if (uris.isNotEmpty()) scope.launch {
+            val imported = withContext(Dispatchers.IO) { MediaStorage.importMedia(context, uris) }
+            media = media + imported
+        }
     }
 
     Dialog(
@@ -91,11 +114,22 @@ fun AddMilestoneDialog(
                     modifier = Modifier.fillMaxWidth(),
                 )
 
-                Row {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(
                         selected = true,
                         onClick = { showDate = true },
                         label = { Text(dateLabel) },
+                    )
+                    FilterChip(
+                        selected = media.isNotEmpty(),
+                        onClick = {
+                            mediaPicker.launch(
+                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo),
+                            )
+                        },
+                        label = {
+                            Text(if (media.isEmpty()) "+ фото и видео" else "фото и видео: ${media.size}")
+                        },
                     )
                 }
 
@@ -118,6 +152,7 @@ fun AddMilestoneDialog(
                                     note = note.trim(),
                                     dateMillis = dateMillis,
                                     colorArgb = blockPalette[(now % blockPalette.size).toInt()],
+                                    media = media,
                                 ),
                             )
                         },
