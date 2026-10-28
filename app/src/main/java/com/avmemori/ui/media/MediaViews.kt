@@ -44,6 +44,8 @@ import com.avmemori.ui.theme.AvColors
 import kotlin.math.roundToInt
 import android.widget.VideoView
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
@@ -88,11 +90,18 @@ fun MediaArea(
     colorArgb: Long,
     onOpen: (() -> Unit)? = null,
     inlineVideoPath: String? = null,
+    inlinePaused: Boolean = false,
+    onInlineTap: (() -> Unit)? = null,
     overlay: @Composable BoxScope.() -> Unit = {},
 ) {
     Box(modifier = Modifier.fillMaxWidth()) {
         when {
-            inlineVideoPath != null -> InlineVideoArea(path = inlineVideoPath, onOpen = onOpen)
+            inlineVideoPath != null -> InlineVideoArea(
+                path = inlineVideoPath,
+                paused = inlinePaused,
+                onTap = onInlineTap ?: {},
+                onLongPress = onOpen,
+            )
             media.isEmpty() -> Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -112,38 +121,36 @@ fun MediaArea(
     }
 }
 
-/** Видео, которое играет прямо в блоке, пока блок на экране. Звук включён. */
+/**
+ * Видео в ленте: тап — пауза или продолжить, зажатие — открыть на весь экран.
+ * Значок ▶ показывается, когда видео на паузе.
+ */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun InlineVideoArea(path: String, onOpen: (() -> Unit)?) {
+fun InlineVideoArea(
+    path: String,
+    paused: Boolean,
+    onTap: () -> Unit,
+    onLongPress: (() -> Unit)?,
+) {
     Box(modifier = Modifier.fillMaxWidth()) {
-        InlineVideo(path = path, modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)))
-        if (onOpen != null) {
-            // Прозрачный слой поверх плеера: тап открывает видео на весь экран.
-            // Плеер не получает касаний, поэтому не ставит паузу и не запускается по тапу.
-            Box(modifier = Modifier.matchParentSize().clickable { onOpen() })
-        }
-        if (onOpen != null) {
-            Text(
-                text = "открыть",
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(6.dp)
-                    .clip(CircleShape)
-                    .background(Color.White.copy(alpha = 0.9f))
-                    .clickable { onOpen() }
-                    .padding(horizontal = 8.dp, vertical = 2.dp),
-                fontSize = 11.sp,
-                color = AvColors.Ink,
-            )
-        }
+        InlineVideo(path = path, paused = paused, modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)))
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .combinedClickable(onClick = onTap, onLongClick = onLongPress),
+        )
+        if (paused) VideoBadge(Modifier.align(Alignment.Center))
     }
 }
 
 /** Встроенный проигрыватель: создаётся, пока блок активен, и освобождается при уходе. */
 @Composable
-fun InlineVideo(path: String, modifier: Modifier = Modifier) {
+fun InlineVideo(path: String, paused: Boolean, modifier: Modifier = Modifier) {
     val lifecycleOwner = LocalLifecycleOwner.current
     val holder = remember { arrayOfNulls<VideoView>(1) }
+    val ready = remember { BooleanArray(1) }
+    val pausedNow = remember { BooleanArray(1) }
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -165,6 +172,17 @@ fun InlineVideo(path: String, modifier: Modifier = Modifier) {
                 view.setVideoPath(path)
                 view.setOnPreparedListener { player ->
                     player.isLooping = true
+                    ready[0] = true
+                    if (!pausedNow[0]) view.start()
+                }
+            }
+        },
+        update = { view ->
+            pausedNow[0] = paused
+            if (ready[0]) {
+                if (paused) {
+                    if (view.isPlaying) view.pause()
+                } else if (!view.isPlaying) {
                     view.start()
                 }
             }

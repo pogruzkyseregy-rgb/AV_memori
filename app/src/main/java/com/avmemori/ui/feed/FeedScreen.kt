@@ -6,6 +6,7 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -46,6 +47,8 @@ import androidx.compose.ui.unit.sp
 import com.avmemori.audio.AudioPlayer
 import com.avmemori.model.Block
 import com.avmemori.model.BlockStyle
+import com.avmemori.model.PhotoFrame
+import com.avmemori.ui.frames.FramedMedia
 import com.avmemori.model.Sticker
 import com.avmemori.ui.common.EditIcon
 import com.avmemori.ui.common.IconTap
@@ -77,6 +80,8 @@ fun FeedScreen(
     player: AudioPlayer,
     shakeEvent: Int,
     blockStyle: BlockStyle,
+    autoplay: Boolean,
+    frame: PhotoFrame,
     onOpenMedia: (Block) -> Unit,
     onEdit: (Block) -> Unit,
     modifier: Modifier = Modifier,
@@ -86,11 +91,15 @@ fun FeedScreen(
     // Во время прокрутки видео выключено, а выбирается уже когда лента остановилась —
     // так не запускаются и не гасятся плееры на каждом кадре и лента идёт ровно.
     var settledVideoId by remember(blocks) { mutableStateOf<Long?>(null) }
+    // Видео, которое пользователь запустил тапом (важнее автоплея).
+    var manualVideoId by remember(blocks) { mutableStateOf<Long?>(null) }
+    val activeVideoId: Long? = manualVideoId ?: if (autoplay) settledVideoId else null
     // Срабатывает и при первом показе ленты (без прокрутки), и после каждой остановки.
     LaunchedEffect(listState, blocks) {
         snapshotFlow { listState.isScrollInProgress }.collectLatest { scrolling ->
             if (scrolling) {
                 settledVideoId = null
+                manualVideoId = null
             } else {
                 delay(250)
                 settledVideoId = pickActiveVideo(listState.layoutInfo, blocks)
@@ -113,7 +122,9 @@ fun FeedScreen(
                 index = index,
                 library = library,
                 player = player,
-                inlineVideo = block.id == settledVideoId,
+                inlineVideo = block.id == activeVideoId,
+                frame = frame,
+                onActivateVideo = { id -> manualVideoId = id },
                 shakeEvent = shakeEvent,
                 style = blockStyle,
                 onOpenMedia = onOpenMedia,
@@ -141,6 +152,7 @@ private fun pickActiveVideo(info: LazyStaggeredGridLayoutInfo, blocks: List<Bloc
     return best
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun BlockCard(
     block: Block,
@@ -150,6 +162,8 @@ fun BlockCard(
     inlineVideo: Boolean,
     shakeEvent: Int,
     style: BlockStyle,
+    frame: PhotoFrame,
+    onActivateVideo: (Long) -> Unit,
     onOpenMedia: (Block) -> Unit,
     onEdit: (Block) -> Unit,
 ) {
@@ -189,6 +203,13 @@ fun BlockCard(
     val open: () -> Unit = { onOpenMedia(block) }
     val context = LocalContext.current
     val inlinePath = if (inlineVideo) block.media.firstOrNull { it.isVideo }?.path else null
+    // Пауза живёт, пока видео активно; при новой активации сбрасывается.
+    var paused by remember(block.id) { mutableStateOf(false) }
+    LaunchedEffect(inlineVideo) { paused = false }
+    val singleVideo = block.media.size == 1 && block.media[0].isVideo
+    val videoTap: () -> Unit = {
+        if (inlineVideo) paused = !paused else onActivateVideo(block.id)
+    }
 
     val cardShape = when (style) {
         BlockStyle.MINIMAL -> RoundedCornerShape(16.dp)
@@ -218,13 +239,30 @@ fun BlockCard(
     ) {
         Box(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(cardPadding)) {
-            MediaArea(
-                media = block.media,
-                colorArgb = block.colorArgb,
-                onOpen = if (block.media.isEmpty()) null else open,
-                inlineVideoPath = inlinePath,
-                overlay = { StickerLayer(placed = block.stickers, library = library) },
-            )
+            FramedMedia(frame = frame) {
+                MediaArea(
+                    media = block.media,
+                    colorArgb = block.colorArgb,
+                    onOpen = if (block.media.isEmpty()) null else open,
+                    inlineVideoPath = inlinePath,
+                    inlinePaused = paused,
+                    onInlineTap = videoTap,
+                    overlay = {
+                        StickerLayer(placed = block.stickers, library = library)
+                        // Видео, которое ещё не играет: тап запускает, зажатие открывает.
+                        if (singleVideo && inlinePath == null) {
+                            Box(
+                                modifier = Modifier
+                                    .matchParentSize()
+                                    .combinedClickable(
+                                        onClick = { onActivateVideo(block.id) },
+                                        onLongClick = open,
+                                    ),
+                            )
+                        }
+                    },
+                )
+            }
 
             if (block.note.isNotBlank()) {
                 Text(

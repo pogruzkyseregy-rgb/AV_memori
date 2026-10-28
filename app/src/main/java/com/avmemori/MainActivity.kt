@@ -47,6 +47,8 @@ import com.avmemori.data.MilestoneStore
 import com.avmemori.data.StickerStore
 import com.avmemori.model.AppMode
 import com.avmemori.model.BlockStyle
+import com.avmemori.model.PhotoFrame
+import com.avmemori.ui.frames.FrameDesignerScreen
 import com.avmemori.model.Block
 import com.avmemori.model.Milestone
 import com.avmemori.model.MilestoneKind
@@ -96,7 +98,7 @@ private fun tabLabel(mode: AppMode, tab: AvTab): String = when (tab) {
 }
 
 /** Экраны поверх главного: мастерская стикеров и настройки. */
-enum class Screen { MAIN, STICKERS, SETTINGS }
+enum class Screen { MAIN, STICKERS, SETTINGS, FRAMES }
 
 @Composable
 fun AvApp() {
@@ -108,6 +110,8 @@ fun AvApp() {
     var mode by remember { mutableStateOf(BabyPrefs.getMode(context)) }
     val shownMode = mode ?: AppMode.KIDS
     var blockStyle by remember { mutableStateOf(BabyPrefs.getBlockStyle(context)) }
+    var autoplay by remember { mutableStateOf(BabyPrefs.getAutoplay(context)) }
+    var frame by remember { mutableStateOf(BabyPrefs.getFrame(context)) }
     var bgStyle by remember { mutableStateOf(BabyPrefs.getBackgroundStyle(context)) }
     var blocks by remember { mutableStateOf(BlockStore.load(context)) }
     var milestones by remember { mutableStateOf(MilestoneStore.load(context)) }
@@ -233,6 +237,8 @@ fun AvApp() {
                             player = player,
                             shakeEvent = shakeCount,
                             blockStyle = blockStyle,
+                            autoplay = autoplay,
+                            frame = frame,
                             onOpenMedia = { block -> viewer = Viewer(block.media, block.id) },
                             onEdit = { block ->
                                 editingBlock = block
@@ -277,11 +283,26 @@ fun AvApp() {
                 onBack = { screen = Screen.MAIN },
             )
 
+            Screen.FRAMES -> FrameDesignerScreen(
+                frame = frame,
+                onChange = { f ->
+                    frame = f
+                    BabyPrefs.setFrame(context, f)
+                },
+                onBack = { screen = Screen.SETTINGS },
+            )
+
             Screen.SETTINGS -> SettingsScreen(
                 babyName = babyName,
                 style = bgStyle,
                 mode = shownMode,
                 blockStyle = blockStyle,
+                autoplay = autoplay,
+                onAutoplayChange = { on ->
+                    autoplay = on
+                    BabyPrefs.setAutoplay(context, on)
+                },
+                onOpenFrames = { screen = Screen.FRAMES },
                 onBlockStyleChange = { style ->
                     blockStyle = style
                     BabyPrefs.setBlockStyle(context, style)

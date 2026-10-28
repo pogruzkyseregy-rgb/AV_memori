@@ -18,6 +18,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -72,6 +73,9 @@ fun SettingsScreen(
     onStyleChange: (BackgroundStyle) -> Unit,
     onModeChange: (AppMode) -> Unit,
     onBlockStyleChange: (BlockStyle) -> Unit,
+    autoplay: Boolean,
+    onAutoplayChange: (Boolean) -> Unit,
+    onOpenFrames: () -> Unit,
     onBack: () -> Unit,
 ) {
     Column(
@@ -180,6 +184,32 @@ fun SettingsScreen(
                     )
                 }
             }
+        }
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(18.dp))
+                .background(Color.White)
+                .padding(horizontal = 18.dp, vertical = 8.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(text = "автоплей видео", fontFamily = BodyFont, fontSize = 16.sp, color = AvColors.Ink)
+                Spacer(modifier = Modifier.weight(1f))
+                Switch(checked = autoplay, onCheckedChange = onAutoplayChange)
+            }
+        }
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(18.dp))
+                .background(Color.White),
+        ) {
+            SettingRow(title = "рамка для фото", value = "настроить", onClick = onOpenFrames)
         }
 
         Spacer(modifier = Modifier.size(8.dp))
