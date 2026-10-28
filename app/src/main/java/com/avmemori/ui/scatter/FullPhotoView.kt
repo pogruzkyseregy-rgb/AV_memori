@@ -45,6 +45,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
@@ -60,9 +61,10 @@ import com.avmemori.ui.theme.NoteFont
 import com.avmemori.util.Share
 
 /**
- * Фото на весь экран. Лицевая сторона: щипок — увеличить, два пальца — повернуть,
- * двойной тап — вернуть вид. «подписать» переворачивает фото: на обратной стороне
- * подпись и стикеры, которые можно таскать и крутить.
+ * Фото на весь экран.
+ * Лицевая сторона: щипок — увеличить, два пальца — повернуть, двойной тап — вернуть вид.
+ * Одиночный тап переворачивает фото: сзади подпись и стикеры только для чтения.
+ * Редактирование — отдельно, кнопками «подписать» и «изменить».
  */
 @Composable
 fun FullPhotoView(
@@ -72,14 +74,19 @@ fun FullPhotoView(
     onClose: () -> Unit,
 ) {
     var flipped by remember { mutableStateOf(false) }
+    var editing by remember { mutableStateOf(false) }
     val flip by animateFloatAsState(
         targetValue = if (flipped) 180f else 0f,
         animationSpec = tween(durationMillis = 500, easing = FastOutSlowInEasing),
         label = "flip",
     )
-    // «Назад» сначала переворачивает обратно, и только потом закрывает фото.
+    // «Назад»: сначала выходим из редактирования, потом переворачиваем, и только потом закрываем.
     BackHandler {
-        if (flipped) flipped = false else onClose()
+        when {
+            editing -> editing = false
+            flipped -> flipped = false
+            else -> onClose()
+        }
     }
 
     // Фото «раскрывается» поверх остальных: появляется из чуть меньшего размера.
@@ -105,14 +112,30 @@ fun FullPhotoView(
             },
     ) {
         if (flip < 90f) {
-            FrontSide(media = media, onFlip = { flipped = true }, onClose = onClose)
-        } else {
+            FrontSide(
+                media = media,
+                onTap = { flipped = true },
+                onSign = {
+                    editing = true
+                    flipped = true
+                },
+                onClose = onClose,
+            )
+        } else if (editing) {
             BackSide(
                 media = media,
                 library = library,
                 onChange = onChange,
-                onFlip = { flipped = false },
+                onDone = { editing = false },
                 // Обратная сторона повёрнута вместе с контейнером, поэтому разворачиваем её обратно.
+                modifier = Modifier.graphicsLayer { rotationY = 180f },
+            )
+        } else {
+            BackView(
+                media = media,
+                library = library,
+                onTap = { flipped = false },
+                onEdit = { editing = true },
                 modifier = Modifier.graphicsLayer { rotationY = 180f },
             )
         }
@@ -120,7 +143,12 @@ fun FullPhotoView(
 }
 
 @Composable
-private fun FrontSide(media: Media, onFlip: () -> Unit, onClose: () -> Unit) {
+private fun FrontSide(
+    media: Media,
+    onTap: () -> Unit,
+    onSign: () -> Unit,
+    onClose: () -> Unit,
+) {
     val context = LocalContext.current
     var scale by remember { mutableFloatStateOf(1f) }
     var rotation by remember { mutableFloatStateOf(0f) }
@@ -140,11 +168,14 @@ private fun FrontSide(media: Media, onFlip: () -> Unit, onClose: () -> Unit) {
                     }
                 }
                 .pointerInput(Unit) {
-                    detectTapGestures(onDoubleTap = { _ ->
-                        scale = 1f
-                        rotation = 0f
-                        offset = Offset.Zero
-                    })
+                    detectTapGestures(
+                        onTap = { _ -> onTap() },
+                        onDoubleTap = { _ ->
+                            scale = 1f
+                            rotation = 0f
+                            offset = Offset.Zero
+                        },
+                    )
                 }
                 .graphicsLayer {
                     scaleX = scale
@@ -179,7 +210,7 @@ private fun FrontSide(media: Media, onFlip: () -> Unit, onClose: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Text(
-                text = "двойной тап — вернуть вид",
+                text = "тап — перевернуть · двойной тап — вернуть вид",
                 fontFamily = BodyFont,
                 fontSize = 12.sp,
                 color = AvColors.InkSoft,
@@ -188,18 +219,79 @@ private fun FrontSide(media: Media, onFlip: () -> Unit, onClose: () -> Unit) {
                 ActionPill(label = "поделиться") {
                     Share.shareMedia(context, listOf(media), media.caption.takeIf { it.isNotBlank() })
                 }
-                ActionPill(label = "подписать", onClick = onFlip)
+                ActionPill(label = "подписать", onClick = onSign)
             }
         }
     }
 }
 
+/** Обратная сторона только для чтения: подпись и стикеры. Тап — вернуть фото. */
+@Composable
+private fun BackView(
+    media: Media,
+    library: List<Sticker>,
+    onTap: () -> Unit,
+    onEdit: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val libMap = remember(library) { library.associateBy { it.id } }
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .padding(20.dp)
+            .clickable(onClick = onTap),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            text = media.caption.ifBlank { "без подписи" },
+            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+            fontFamily = NoteFont,
+            fontSize = 26.sp,
+            color = if (media.caption.isBlank()) AvColors.InkSoft else AvColors.Ink,
+            textAlign = TextAlign.Center,
+        )
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color.White),
+            contentAlignment = Alignment.Center,
+        ) {
+            LocalPhoto(
+                path = media.path,
+                modifier = Modifier.fillMaxSize().alpha(0.2f),
+                contentScale = ContentScale.Fit,
+            )
+            StickerLayer(
+                placed = media.stickers,
+                library = libMap,
+                interactive = false,
+            )
+        }
+
+        Text(
+            text = "тап — вернуть фото",
+            fontFamily = BodyFont,
+            fontSize = 12.sp,
+            color = AvColors.InkSoft,
+        )
+        ActionPill(label = "изменить", onClick = onEdit)
+    }
+}
+
+/** Редактирование подписи и стикеров. Открывается кнопками «подписать» и «изменить». */
 @Composable
 private fun BackSide(
     media: Media,
     library: List<Sticker>,
     onChange: (Media) -> Unit,
-    onFlip: () -> Unit,
+    onDone: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var selected by remember { mutableStateOf<Int?>(null) }
@@ -218,7 +310,7 @@ private fun BackSide(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            ActionPill(label = "← к фото", onClick = onFlip)
+            ActionPill(label = "готово", onClick = onDone)
             val sel = selected
             if (sel != null && sel < media.stickers.size) {
                 ActionPill(label = "убрать стикер") {
