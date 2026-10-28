@@ -6,6 +6,10 @@ data class Media(
     val isVideo: Boolean = false,
     /** Для видео — кадр-превью (jpg). Для фото не нужен. */
     val thumbPath: String? = null,
+    /** Подпись, которая показывается на обратной стороне фото. */
+    val caption: String = "",
+    /** Стикеры на обратной стороне фото. */
+    val stickers: List<PlacedSticker> = emptyList(),
 )
 
 /** Стикер из мастерской: картинка с прозрачным фоном. */
@@ -13,6 +17,8 @@ data class Sticker(
     val id: Long,
     val name: String,
     val path: String,
+    /** Встроенный стикер из набора AV (нельзя удалить). */
+    val builtIn: Boolean = false,
 )
 
 /**

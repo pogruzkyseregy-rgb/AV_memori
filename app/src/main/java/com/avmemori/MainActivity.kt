@@ -98,7 +98,7 @@ fun AvApp() {
     var bgStyle by remember { mutableStateOf(BabyPrefs.getBackgroundStyle(context)) }
     var blocks by remember { mutableStateOf(BlockStore.load(context)) }
     var milestones by remember { mutableStateOf(MilestoneStore.load(context)) }
-    var stickers by remember { mutableStateOf(StickerStore.load(context)) }
+    var stickers by remember { mutableStateOf(StickerStore.loadWithBuiltIn(context)) }
     val library = remember(stickers) { stickers.associateBy { it.id } }
 
     var screen by remember { mutableStateOf(Screen.MAIN) }
@@ -228,13 +228,13 @@ fun AvApp() {
                     AvTab.EVENTS -> MilestonesScreen(
                         items = shownMilestones,
                         kind = MilestoneKind.EVENT,
-                        onOpenMedia = { m -> viewer = Viewer(m.media, m.id) },
+                        onOpenMedia = { m -> viewer = Viewer(m.media, m.id, isMilestone = true) },
                         modifier = Modifier.weight(1f),
                     )
                     AvTab.ACHIEVEMENTS -> MilestonesScreen(
                         items = shownMilestones,
                         kind = MilestoneKind.ACHIEVEMENT,
-                        onOpenMedia = { m -> viewer = Viewer(m.media, m.id) },
+                        onOpenMedia = { m -> viewer = Viewer(m.media, m.id, isMilestone = true) },
                         modifier = Modifier.weight(1f),
                     )
                 }
@@ -304,8 +304,19 @@ fun AvApp() {
             PhotoScatter(
                 media = v.media,
                 seed = v.seed,
+                library = stickers,
                 onClose = { viewer = null },
                 onOpenVideo = { videoPath = it.path },
+                onMediaChange = { newMedia ->
+                    viewer = v.copy(media = newMedia)
+                    if (v.isMilestone) {
+                        milestones = milestones.map { if (it.id == v.seed) it.copy(media = newMedia) else it }
+                        MilestoneStore.save(context, milestones)
+                    } else {
+                        blocks = blocks.map { if (it.id == v.seed) it.copy(media = newMedia) else it }
+                        saveBlocks()
+                    }
+                },
             )
         }
 

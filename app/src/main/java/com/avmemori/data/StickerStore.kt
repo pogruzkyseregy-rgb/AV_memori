@@ -12,6 +12,41 @@ object StickerStore {
 
     fun stickersDir(context: Context): File = File(context.filesDir, "stickers").apply { mkdirs() }
 
+    /** Встроенные стикеры AV получают фиксированные id, чтобы не пересекаться с пользовательскими. */
+    private const val BUILT_IN_BASE_ID = 1_000L
+
+    /**
+     * Загружает библиотеку и добавляет встроенный набор AV, если его ещё нет.
+     * Картинки копируются из assets один раз в filesDir/stickers.
+     */
+    fun loadWithBuiltIn(context: Context): List<Sticker> {
+        val current = load(context)
+        val names = try {
+            context.assets.list("stickers")?.sorted().orEmpty()
+        } catch (e: Exception) {
+            emptyList()
+        }
+        val existing = current.map { it.id }.toSet()
+        val added = names.mapIndexedNotNull { index, asset ->
+            val id = BUILT_IN_BASE_ID + index
+            if (id in existing) return@mapIndexedNotNull null
+            val target = File(stickersDir(context), "av_$asset")
+            try {
+                if (!target.exists()) {
+                    context.assets.open("stickers/$asset").use { input ->
+                        target.outputStream().use { input.copyTo(it) }
+                    }
+                }
+                Sticker(id = id, name = "AV ${index + 1}", path = target.absolutePath, builtIn = true)
+            } catch (e: Exception) {
+                null
+            }
+        }
+        val result = current + added
+        if (added.isNotEmpty()) save(context, result)
+        return result
+    }
+
     fun load(context: Context): List<Sticker> {
         val file = File(context.filesDir, FILE_NAME)
         if (!file.exists()) return emptyList()
@@ -23,6 +58,7 @@ object StickerStore {
                     id = o.getLong("id"),
                     name = o.optString("name", ""),
                     path = o.getString("path"),
+                    builtIn = o.optBoolean("builtIn", false),
                 )
             }
         } catch (e: Exception) {
@@ -38,6 +74,7 @@ object StickerStore {
                     put("id", s.id)
                     put("name", s.name)
                     put("path", s.path)
+                    put("builtIn", s.builtIn)
                 },
             )
         }

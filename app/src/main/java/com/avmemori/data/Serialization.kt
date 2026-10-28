@@ -14,12 +14,16 @@ internal fun Media.toJson(): JSONObject = JSONObject().apply {
     put("path", path)
     put("isVideo", isVideo)
     thumbPath?.let { put("thumb", it) }
+    if (caption.isNotEmpty()) put("caption", caption)
+    if (stickers.isNotEmpty()) put("stickers", JSONArray(stickers.map { it.toJson() }))
 }
 
 internal fun JSONObject.toMedia(): Media = Media(
     path = getString("path"),
     isVideo = optBoolean("isVideo", false),
     thumbPath = optStr("thumb"),
+    caption = optStr("caption").orEmpty(),
+    stickers = optJSONArray("stickers")?.toPlacedStickerList().orEmpty(),
 )
 
 internal fun JSONArray.toMediaList(): List<Media> =

@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import com.avmemori.model.Media
+import com.avmemori.model.Sticker
 import com.avmemori.ui.feed.LocalPhoto
 import com.avmemori.ui.media.VideoBadge
 import com.avmemori.ui.media.thumbPathOf
@@ -53,7 +54,7 @@ import kotlin.math.roundToInt
 import kotlin.random.Random
 
 /** Что показываем в разлёте: медиа блока или момента и зерно случайности. */
-data class Viewer(val media: List<Media>, val seed: Long)
+data class Viewer(val media: List<Media>, val seed: Long, val isMilestone: Boolean = false)
 
 /** Место фото до жестов пальцем: центр и небольшой наклон. */
 private data class Spot(val target: Offset, val angle: Float)
@@ -70,12 +71,14 @@ private data class Pose(val offset: Offset = Offset.Zero, val scale: Float = 1f,
 fun PhotoScatter(
     media: List<Media>,
     seed: Long,
+    library: List<Sticker>,
     onClose: () -> Unit,
     onOpenVideo: (Media) -> Unit,
+    onMediaChange: (List<Media>) -> Unit,
 ) {
-    // Полноэкранное фото открыто — «назад» закрывает его, а не всю россыпь.
-    var fullPhoto by remember(seed) { mutableStateOf<Media?>(null) }
-    BackHandler(enabled = fullPhoto == null, onBack = onClose)
+    // Индекс полноэкранного фото: открыто — «назад» закрывает его, а не всю россыпь.
+    var fullIndex by remember(seed) { mutableStateOf<Int?>(null) }
+    BackHandler(enabled = fullIndex == null, onBack = onClose)
 
     val density = LocalDensity.current
     var areaPx by remember { mutableStateOf(IntSize.Zero) }
@@ -160,7 +163,7 @@ fun PhotoScatter(
                                         order.add(i)
                                     },
                                     onTap = { _ ->
-                                        if (item.isVideo) onOpenVideo(item) else fullPhoto = item
+                                        if (item.isVideo) onOpenVideo(item) else fullIndex = i
                                     },
                                 )
                             },
@@ -207,8 +210,17 @@ fun PhotoScatter(
             color = AvColors.InkSoft,
         )
 
-        fullPhoto?.let { photo ->
-            FullPhotoView(path = photo.path, onClose = { fullPhoto = null })
+        fullIndex?.let { idx ->
+            if (idx < media.size) {
+                FullPhotoView(
+                    media = media[idx],
+                    library = library,
+                    onChange = { updated ->
+                        onMediaChange(media.toMutableList().also { it[idx] = updated })
+                    },
+                    onClose = { fullIndex = null },
+                )
+            }
         }
     }
 }

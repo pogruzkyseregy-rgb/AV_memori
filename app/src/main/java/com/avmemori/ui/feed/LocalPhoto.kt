@@ -3,6 +3,7 @@ package com.avmemori.ui.feed
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
+import android.util.LruCache
 import androidx.compose.foundation.Image
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -25,8 +26,11 @@ fun LocalPhoto(
     modifier: Modifier = Modifier,
     contentScale: ContentScale = ContentScale.FillWidth,
 ) {
-    val bitmap by produceState<ImageBitmap?>(initialValue = null, key1 = path) {
-        value = withContext(Dispatchers.IO) { decodeScaled(path, 900)?.asImageBitmap() }
+    // Уже декодированные картинки берём из кеша: при прокрутке назад они появляются сразу.
+    val bitmap by produceState<ImageBitmap?>(initialValue = PhotoCache.get(path), key1 = path) {
+        value = PhotoCache.get(path) ?: withContext(Dispatchers.IO) {
+            decodeScaled(path, 900)?.asImageBitmap()?.also { PhotoCache.put(path, it) }
+        }
     }
     bitmap?.let {
         Image(
@@ -35,6 +39,24 @@ fun LocalPhoto(
             modifier = modifier,
             contentScale = contentScale,
         )
+    }
+}
+
+/** Кеш декодированных картинок: около 1/8 памяти приложения. */
+private object PhotoCache {
+    private val cache = object : LruCache<String, ImageBitmap>(
+        (Runtime.getRuntime().maxMemory() / 1024 / 8).toInt(),
+    ) {
+        override fun sizeOf(key: String, value: ImageBitmap): Int =
+            (value.width * value.height * 4 / 1024).coerceAtLeast(1)
+    }
+
+    @Synchronized
+    fun get(path: String): ImageBitmap? = cache.get(path)
+
+    @Synchronized
+    fun put(path: String, bitmap: ImageBitmap) {
+        cache.put(path, bitmap)
     }
 }
 

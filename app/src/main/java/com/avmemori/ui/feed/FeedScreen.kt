@@ -27,7 +27,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -37,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -44,6 +45,7 @@ import com.avmemori.audio.AudioPlayer
 import com.avmemori.model.Block
 import com.avmemori.model.Sticker
 import com.avmemori.ui.media.MediaArea
+import com.avmemori.util.Share
 import com.avmemori.ui.media.StickerLayer
 import com.avmemori.ui.theme.AvColors
 import com.avmemori.ui.theme.NoteFont
@@ -67,8 +69,16 @@ fun FeedScreen(
 ) {
     val listState = rememberLazyStaggeredGridState()
     // Видео играет только в одном блоке: том, который сильнее всего виден на экране.
-    val activeVideoId by remember(blocks) {
-        derivedStateOf { pickActiveVideo(listState.layoutInfo, blocks) }
+    // Во время прокрутки видео выключено, а выбирается уже когда лента остановилась —
+    // так не запускаются и не гасятся плееры на каждом кадре и лента идёт ровно.
+    var settledVideoId by remember(blocks) { mutableStateOf<Long?>(null) }
+    LaunchedEffect(listState.isScrollInProgress, blocks) {
+        if (listState.isScrollInProgress) {
+            settledVideoId = null
+        } else {
+            delay(250)
+            settledVideoId = pickActiveVideo(listState.layoutInfo, blocks)
+        }
     }
 
     LazyVerticalStaggeredGrid(
@@ -86,7 +96,7 @@ fun FeedScreen(
                 index = index,
                 library = library,
                 player = player,
-                inlineVideo = block.id == activeVideoId,
+                inlineVideo = block.id == settledVideoId,
                 shakeEvent = shakeEvent,
                 onOpenMedia = onOpenMedia,
                 onEdit = onEdit,
@@ -156,6 +166,7 @@ fun BlockCard(
     val musicKey = "music-${block.id}"
     val voiceKey = "voice-${block.id}"
     val open: () -> Unit = { onOpenMedia(block) }
+    val context = LocalContext.current
     val inlinePath = if (inlineVideo) block.media.firstOrNull { it.isVideo }?.path else null
 
     Surface(
@@ -170,7 +181,6 @@ fun BlockCard(
             },
         shape = RoundedCornerShape(6.dp),
         color = Color.White,
-        shadowElevation = 3.dp,
     ) {
         Column(modifier = Modifier.padding(8.dp)) {
             MediaArea(
@@ -231,6 +241,17 @@ fun BlockCard(
                     style = MaterialTheme.typography.labelSmall,
                     color = AvColors.InkSoft,
                     modifier = Modifier.weight(1f),
+                )
+                Text(
+                    text = "поделиться",
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .clickable {
+                            Share.shareMedia(context, block.media, block.note.takeIf { it.isNotBlank() })
+                        }
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = AvColors.InkSoft,
                 )
                 Text(
                     text = "изменить",

@@ -52,6 +52,7 @@ import com.avmemori.model.blockPalette
 import com.avmemori.ui.feed.LocalPhoto
 import com.avmemori.ui.media.MediaArea
 import com.avmemori.ui.media.StickerLayer
+import com.avmemori.ui.media.StickerTray
 import com.avmemori.ui.theme.AvColors
 import com.avmemori.ui.theme.BodyFont
 import com.avmemori.ui.theme.NoteFont
@@ -226,33 +227,9 @@ fun BlockEditor(
             fontSize = 13.sp,
             color = AvColors.InkSoft,
         )
-        if (library.isEmpty()) {
-            Text(
-                text = "своих стикеров пока нет — сделай их в мастерской (кнопка «стикеры» наверху)",
-                fontFamily = BodyFont,
-                fontSize = 12.sp,
-                color = AvColors.InkSoft,
-            )
-        } else {
-            Row(
-                modifier = Modifier.horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                library.forEach { s ->
-                    LocalPhoto(
-                        path = s.path,
-                        contentScale = ContentScale.Fit,
-                        modifier = Modifier
-                            .size(64.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(Color.White)
-                            .clickable {
-                                stickers = stickers + PlacedSticker(stickerId = s.id)
-                                selected = stickers.lastIndex
-                            },
-                    )
-                }
-            }
+        StickerTray(library = library) { s ->
+            stickers = stickers + PlacedSticker(stickerId = s.id)
+            selected = stickers.lastIndex
         }
 
         val selectedNow = selected
@@ -303,3 +280,4 @@ fun BlockEditor(
         }
     }
 }
+

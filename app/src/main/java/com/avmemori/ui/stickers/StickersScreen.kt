@@ -19,7 +19,9 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.item
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -72,7 +74,8 @@ fun StickersScreen(
                 busy = false
                 if (path != null) {
                     val now = System.currentTimeMillis()
-                    onAdd(Sticker(id = now, name = "стикер ${stickers.size + 1}", path = path))
+                    val own = stickers.count { !it.builtIn }
+                    onAdd(Sticker(id = now, name = "стикер ${own + 1}", path = path))
                 }
             }
         }
@@ -104,7 +107,7 @@ fun StickersScreen(
             color = AvColors.Ink,
         )
         Text(
-            text = "выбери картинку — фон уберу сам, выступающие части останутся. Долгое нажатие — удалить.",
+            text = "выбери картинку — фон уберу сам, выступающие части останутся. Свои стикеры можно удалить долгим нажатием.",
             fontFamily = BodyFont,
             fontSize = 12.sp,
             color = AvColors.InkSoft,
@@ -119,35 +122,56 @@ fun StickersScreen(
             Text(if (busy) "вырезаю…" else "добавить стикер")
         }
 
-        if (stickers.isEmpty()) {
-            Box(modifier = Modifier.fillMaxWidth().padding(top = 40.dp), contentAlignment = Alignment.Center) {
-                Text(
-                    text = "пока пусто ✿",
-                    fontFamily = NoteFont,
-                    fontSize = 22.sp,
-                    color = AvColors.InkSoft,
-                )
-            }
-        } else {
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(3),
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                items(stickers, key = { it.id }) { s ->
-                    LocalPhoto(
-                        path = s.path,
-                        contentScale = ContentScale.Fit,
-                        modifier = Modifier
-                            .aspectRatio(1f)
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(Color.White)
-                            .combinedClickable(onClick = {}, onLongClick = { onRemove(s) })
-                            .padding(8.dp),
+        val builtIn = stickers.filter { it.builtIn }
+        val own = stickers.filter { !it.builtIn }
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(3),
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            item(span = { GridItemSpan(maxLineSpan) }) { SectionTitle("AV") }
+            items(builtIn, key = { it.id }) { s -> StickerCell(s, onLongClick = null) }
+
+            item(span = { GridItemSpan(maxLineSpan) }) { SectionTitle("свои") }
+            if (own.isEmpty()) {
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    Text(
+                        text = "пока пусто ✿",
+                        fontFamily = NoteFont,
+                        fontSize = 20.sp,
+                        color = AvColors.InkSoft,
                     )
                 }
+            } else {
+                items(own, key = { it.id }) { s -> StickerCell(s, onLongClick = { onRemove(s) }) }
             }
         }
     }
+}
+
+@Composable
+private fun SectionTitle(title: String) {
+    Text(
+        text = title,
+        fontFamily = BodyFont,
+        fontSize = 13.sp,
+        color = AvColors.InkSoft,
+        modifier = Modifier.padding(top = 4.dp),
+    )
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun StickerCell(sticker: Sticker, onLongClick: (() -> Unit)?) {
+    LocalPhoto(
+        path = sticker.path,
+        contentScale = ContentScale.Fit,
+        modifier = Modifier
+            .aspectRatio(1f)
+            .clip(RoundedCornerShape(14.dp))
+            .background(Color.White)
+            .combinedClickable(onClick = {}, onLongClick = onLongClick)
+            .padding(8.dp),
+    )
 }

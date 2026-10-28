@@ -224,6 +224,9 @@ fun BoxScope.StickerLayer(
     val density = LocalDensity.current
     var areaPx by remember { mutableStateOf(IntSize.Zero) }
     val basePx = with(density) { STICKER_SIZE.toPx() }
+    // Жесты живут дольше одной композиции: читаем самые свежие колбэки, а не первые.
+    val currentOnSelect by rememberUpdatedState(onSelect)
+    val currentOnChange by rememberUpdatedState(onChange)
 
     Box(
         modifier = Modifier
@@ -231,7 +234,7 @@ fun BoxScope.StickerLayer(
             .onSizeChanged { areaPx = it }
             .then(
                 if (interactive) {
-                    Modifier.pointerInput(Unit) { detectTapGestures(onTap = { onSelect(null) }) }
+                    Modifier.pointerInput(Unit) { detectTapGestures(onTap = { currentOnSelect(null) }) }
                 } else {
                     Modifier
                 },
@@ -265,12 +268,12 @@ fun BoxScope.StickerLayer(
                         if (interactive) {
                             Modifier
                                 .pointerInput(index) {
-                                    detectTapGestures(onTap = { onSelect(index) })
+                                    detectTapGestures(onTap = { currentOnSelect(index) })
                                 }
                                 .pointerInput(index) {
                                     detectTransformGestures { _, pan, zoom, rot ->
                                         val cur = currentP
-                                        onChange(
+                                        currentOnChange(
                                             index,
                                             cur.copy(
                                                 x = (cur.x + pan.x / areaPx.width).coerceIn(0f, 1f),
