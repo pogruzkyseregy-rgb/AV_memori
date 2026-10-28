@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -40,6 +41,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import com.avmemori.model.Media
 import com.avmemori.ui.feed.LocalPhoto
 import com.avmemori.ui.media.VideoBadge
@@ -117,42 +119,48 @@ fun PhotoScatter(
             val itemWdp = with(density) { itemW.toDp() }
             val itemHdp = with(density) { itemH.toDp() }
 
-            order.toList().forEach { i ->
-                val spot = spots[i]
-                val drag = dragOffsets[i] ?: Offset.Zero
-                val x = startX + (spot.target.x + drag.x - startX) * t
-                val y = startY + (spot.target.y + drag.y - startY) * t
-                val item = media[i]
+            // Каждое фото — свой постоянный узел (key), порядок наложения задаёт zIndex.
+            // Раньше порядок менялся перестановкой детей, и жест сбрасывался — отсюда дёрганье.
+            media.indices.forEach { i ->
+                key(i) {
+                    val spot = spots[i]
+                    val drag = dragOffsets[i] ?: Offset.Zero
+                    val x = startX + (spot.target.x + drag.x - startX) * t
+                    val y = startY + (spot.target.y + drag.y - startY) * t
+                    val item = media[i]
+                    val layer = order.indexOf(i).toFloat()
 
-                Surface(
-                    modifier = Modifier
-                        .offset { IntOffset(x.roundToInt(), y.roundToInt()) }
-                        .size(itemWdp, itemHdp)
-                        .graphicsLayer { rotationZ = spot.angle * t }
-                        .pointerInput(i) {
-                            detectDragGestures(
-                                onDragStart = {
-                                    order.remove(i)
-                                    order.add(i)
-                                },
-                                onDrag = { change, delta ->
-                                    change.consume()
-                                    dragOffsets[i] = (dragOffsets[i] ?: Offset.Zero) + delta
-                                },
+                    Surface(
+                        modifier = Modifier
+                            .zIndex(layer)
+                            .offset { IntOffset(x.roundToInt(), y.roundToInt()) }
+                            .size(itemWdp, itemHdp)
+                            .graphicsLayer { rotationZ = spot.angle * t }
+                            .pointerInput(Unit) {
+                                detectDragGestures(
+                                    onDragStart = {
+                                        order.remove(i)
+                                        order.add(i)
+                                    },
+                                    onDrag = { change, delta ->
+                                        change.consume()
+                                        dragOffsets[i] = (dragOffsets[i] ?: Offset.Zero) + delta
+                                    },
+                                )
+                            }
+                            .then(if (item.isVideo) Modifier.clickable { onOpenVideo(item) } else Modifier),
+                        shape = RoundedCornerShape(4.dp),
+                        color = Color.White,
+                        shadowElevation = 8.dp,
+                    ) {
+                        Box(modifier = Modifier.padding(8.dp).fillMaxSize()) {
+                            LocalPhoto(
+                                path = thumbPathOf(item),
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop,
                             )
+                            if (item.isVideo) VideoBadge(Modifier.align(Alignment.Center))
                         }
-                        .then(if (item.isVideo) Modifier.clickable { onOpenVideo(item) } else Modifier),
-                    shape = RoundedCornerShape(4.dp),
-                    color = Color.White,
-                    shadowElevation = 8.dp,
-                ) {
-                    Box(modifier = Modifier.padding(8.dp).fillMaxSize()) {
-                        LocalPhoto(
-                            path = thumbPathOf(item),
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop,
-                        )
-                        if (item.isVideo) VideoBadge(Modifier.align(Alignment.Center))
                     }
                 }
             }

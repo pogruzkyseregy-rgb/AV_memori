@@ -66,19 +66,14 @@ fun SettingsScreen(
             )
         }
 
-        Column(
+        Text(
+            text = "настройки",
             modifier = Modifier.fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Image(
-                painter = painterResource(R.drawable.logo_fox),
-                contentDescription = null,
-                modifier = Modifier.size(120.dp),
-                contentScale = ContentScale.Fit,
-            )
-            Text(text = "настройки", fontFamily = NoteFont, fontSize = 30.sp, color = AvColors.Ink)
-        }
+            fontFamily = NoteFont,
+            fontSize = 30.sp,
+            color = AvColors.Ink,
+            textAlign = TextAlign.Center,
+        )
 
         Column(
             modifier = Modifier
