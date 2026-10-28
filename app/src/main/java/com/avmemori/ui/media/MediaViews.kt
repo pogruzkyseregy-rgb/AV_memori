@@ -118,6 +118,11 @@ fun InlineVideoArea(path: String, onOpen: (() -> Unit)?) {
     Box(modifier = Modifier.fillMaxWidth()) {
         InlineVideo(path = path, modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)))
         if (onOpen != null) {
+            // Прозрачный слой поверх плеера: тап открывает видео на весь экран.
+            // Плеер не получает касаний, поэтому не ставит паузу и не запускается по тапу.
+            Box(modifier = Modifier.matchParentSize().clickable { onOpen() })
+        }
+        if (onOpen != null) {
             Text(
                 text = "открыть",
                 modifier = Modifier
