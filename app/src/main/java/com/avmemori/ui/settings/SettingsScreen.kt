@@ -30,6 +30,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.avmemori.R
+import com.avmemori.model.AppMode
 import com.avmemori.model.BackgroundStyle
 import com.avmemori.ui.theme.AvColors
 import com.avmemori.ui.theme.BodyFont
@@ -42,8 +43,10 @@ import com.avmemori.ui.theme.NoteFont
 fun SettingsScreen(
     babyName: String,
     style: BackgroundStyle,
+    mode: AppMode,
     onRename: () -> Unit,
     onStyleChange: (BackgroundStyle) -> Unit,
+    onModeChange: (AppMode) -> Unit,
     onBack: () -> Unit,
 ) {
     Column(
@@ -82,10 +85,30 @@ fun SettingsScreen(
                 .background(Color.White),
         ) {
             SettingRow(
-                title = "имя малыша",
+                title = mode.settingsNameLabel,
                 value = babyName.ifBlank { "не задано" },
                 onClick = onRename,
             )
+        }
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(18.dp))
+                .background(Color.White)
+                .padding(horizontal = 18.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(text = "режим", fontFamily = BodyFont, fontSize = 16.sp, color = AvColors.Ink)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                AppMode.values().forEach { option ->
+                    FilterChip(
+                        selected = option == mode,
+                        onClick = { onModeChange(option) },
+                        label = { Text(option.title) },
+                    )
+                }
+            }
         }
 
         Column(

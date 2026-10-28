@@ -19,6 +19,8 @@ import com.avmemori.ui.theme.NoteFont
 @Composable
 fun NameDialog(
     current: String,
+    question: String,
+    placeholder: String,
     onSave: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -28,14 +30,14 @@ fun NameDialog(
         onDismissRequest = onDismiss,
         containerColor = AvColors.Paper,
         title = {
-            Text(text = "как зовут малыша?", fontFamily = NoteFont, fontSize = 22.sp, color = AvColors.Ink)
+            Text(text = question, fontFamily = NoteFont, fontSize = 22.sp, color = AvColors.Ink)
         },
         text = {
             OutlinedTextField(
                 value = name,
                 onValueChange = { name = it.take(30) },
                 singleLine = true,
-                placeholder = { Text("например, Соня") },
+                placeholder = { Text(placeholder) },
                 modifier = Modifier.fillMaxWidth(),
             )
         },

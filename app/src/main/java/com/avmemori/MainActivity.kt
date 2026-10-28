@@ -45,12 +45,14 @@ import com.avmemori.data.BabyPrefs
 import com.avmemori.data.BlockStore
 import com.avmemori.data.MilestoneStore
 import com.avmemori.data.StickerStore
+import com.avmemori.model.AppMode
 import com.avmemori.model.Block
 import com.avmemori.model.Milestone
 import com.avmemori.model.MilestoneKind
 import com.avmemori.sensor.ShakeDetector
 import com.avmemori.ui.add.AddMilestoneDialog
 import com.avmemori.ui.background.AnimatedBackground
+import com.avmemori.ui.common.ModePickerDialog
 import com.avmemori.ui.common.NameDialog
 import com.avmemori.ui.editor.BlockEditor
 import com.avmemori.ui.feed.FeedScreen
@@ -85,6 +87,13 @@ enum class AvTab(val title: String) {
     ACHIEVEMENTS("достижения"),
 }
 
+/** Подпись вкладки зависит от режима: «события» для детей, «свидания» для пары. */
+private fun tabLabel(mode: AppMode, tab: AvTab): String = when (tab) {
+    AvTab.FEED -> tab.title
+    AvTab.EVENTS -> mode.eventsTitle
+    AvTab.ACHIEVEMENTS -> mode.achievementsTitle
+}
+
 /** Экраны поверх главного: мастерская стикеров и настройки. */
 enum class Screen { MAIN, STICKERS, SETTINGS }
 
@@ -95,6 +104,8 @@ fun AvApp() {
     val player = remember { AudioPlayer() }
 
     var babyName by remember { mutableStateOf(BabyPrefs.getName(context)) }
+    var mode by remember { mutableStateOf(BabyPrefs.getMode(context)) }
+    val shownMode = mode ?: AppMode.KIDS
     var bgStyle by remember { mutableStateOf(BabyPrefs.getBackgroundStyle(context)) }
     var blocks by remember { mutableStateOf(BlockStore.load(context)) }
     var milestones by remember { mutableStateOf(MilestoneStore.load(context)) }
@@ -182,6 +193,7 @@ fun AvApp() {
             Screen.MAIN -> Column(modifier = Modifier.fillMaxSize()) {
                 Header(
                     name = babyName,
+                    mode = shownMode,
                     onNameClick = { showName = true },
                     onSearch = {
                         searchOpen = !searchOpen
@@ -256,6 +268,11 @@ fun AvApp() {
             Screen.SETTINGS -> SettingsScreen(
                 babyName = babyName,
                 style = bgStyle,
+                mode = shownMode,
+                onModeChange = { newMode ->
+                    mode = newMode
+                    BabyPrefs.setMode(context, newMode)
+                },
                 onRename = { showName = true },
                 onStyleChange = { newStyle ->
                     bgStyle = newStyle
@@ -269,6 +286,7 @@ fun AvApp() {
             // Нижняя панель вкладок.
             TabBar(
                 selected = tab,
+                mode = shownMode,
                 onSelect = { tab = it },
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
@@ -356,9 +374,18 @@ fun AvApp() {
         )
     }
 
-    if (showName) {
+    if (mode == null) {
+        ModePickerDialog(onPick = { picked ->
+            mode = picked
+            BabyPrefs.setMode(context, picked)
+        })
+    }
+
+    if (showName && mode != null) {
         NameDialog(
             current = babyName,
+            question = shownMode.nameQuestion,
+            placeholder = shownMode.namePlaceholder,
             onSave = { name ->
                 babyName = name
                 BabyPrefs.setName(context, name)
@@ -372,6 +399,7 @@ fun AvApp() {
 @Composable
 private fun Header(
     name: String,
+    mode: AppMode,
     onNameClick: () -> Unit,
     onSearch: () -> Unit,
     onStickers: () -> Unit,
@@ -390,13 +418,13 @@ private fun Header(
                 .clickable(onClick = onNameClick),
         ) {
             Text(
-                text = name.ifBlank { "наш малыш" },
+                text = name.ifBlank { mode.defaultName },
                 fontFamily = NoteFont,
                 fontSize = 34.sp,
                 color = AvColors.Ink,
             )
             Text(
-                text = "наши моменты",
+                text = mode.subtitle,
                 fontFamily = BodyFont,
                 fontSize = 12.sp,
                 color = AvColors.InkSoft,
@@ -441,6 +469,7 @@ private fun EmptyHint(
 @Composable
 private fun TabBar(
     selected: AvTab,
+    mode: AppMode,
     onSelect: (AvTab) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -460,7 +489,7 @@ private fun TabBar(
                     .clickable { onSelect(tab) }
                     .padding(horizontal = 14.dp, vertical = 8.dp),
             ) {
-                Text(text = tab.title, fontSize = 14.sp, color = AvColors.Ink)
+                Text(text = tabLabel(mode, tab), fontSize = 14.sp, color = AvColors.Ink)
             }
         }
     }
