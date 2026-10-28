@@ -20,7 +20,11 @@ import kotlinx.coroutines.withContext
  * и учитывает поворот из EXIF, чтобы снимки с телефона не лежали боком.
  */
 @Composable
-fun LocalPhoto(path: String, modifier: Modifier = Modifier) {
+fun LocalPhoto(
+    path: String,
+    modifier: Modifier = Modifier,
+    contentScale: ContentScale = ContentScale.FillWidth,
+) {
     val bitmap by produceState<ImageBitmap?>(initialValue = null, key1 = path) {
         value = withContext(Dispatchers.IO) { decodeScaled(path, 900)?.asImageBitmap() }
     }
@@ -29,7 +33,7 @@ fun LocalPhoto(path: String, modifier: Modifier = Modifier) {
             bitmap = it,
             contentDescription = null,
             modifier = modifier,
-            contentScale = ContentScale.FillWidth,
+            contentScale = contentScale,
         )
     }
 }

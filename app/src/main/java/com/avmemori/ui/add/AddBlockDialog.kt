@@ -45,8 +45,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Создание момента: фото, музыка, голосовое и подпись в любом сочетании.
- * Фото и музыка копируются во внутреннее хранилище сразу после выбора.
+ * Создание момента: несколько фото, музыка, голосовое и подпись в любом сочетании.
+ * Все файлы копируются во внутреннее хранилище сразу после выбора.
  */
 @Composable
 fun AddBlockDialog(
@@ -58,7 +58,7 @@ fun AddBlockDialog(
     val recorder = remember { VoiceRecorder(context) }
 
     var note by remember { mutableStateOf("") }
-    var photoPath by remember { mutableStateOf<String?>(null) }
+    var photos by remember { mutableStateOf(listOf<String>()) }
     var musicPath by remember { mutableStateOf<String?>(null) }
     var voicePath by remember { mutableStateOf<String?>(null) }
     var recording by remember { mutableStateOf(false) }
@@ -69,23 +69,23 @@ fun AddBlockDialog(
         onDispose { recorder.cancel() }
     }
 
-    // Фото: Photo Picker на Android 13+, на старых версиях откроется системный выбор.
+    // Несколько фото сразу: Photo Picker на Android 13+, на старых версиях — системный выбор.
     val photoPicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.PickVisualMedia(),
-    ) { uri ->
-        if (uri != null) {
+        ActivityResultContracts.PickMultipleVisualMedia(),
+    ) { uris ->
+        if (uris.isNotEmpty()) {
             scope.launch {
                 busy = true
-                val path = withContext(Dispatchers.IO) {
-                    MediaStorage.copyFromUri(context, uri, "photo", "jpg")
+                val copied = withContext(Dispatchers.IO) {
+                    uris.mapNotNull { MediaStorage.copyFromUri(context, it, "photo", "jpg") }
                 }
-                if (path != null) photoPath = path
+                photos = photos + copied
                 busy = false
             }
         }
     }
 
-    // Музыка: системный выбор файлов (SAF) — не нужны разрешения на чтение хранилища.
+    // Музыка: системный выбор файлов (SAF), разрешения на хранилище не нужны.
     val musicPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
     ) { uri ->
@@ -124,7 +124,7 @@ fun AddBlockDialog(
     }
 
     val canSave = !busy && !recording &&
-        (note.isNotBlank() || photoPath != null || musicPath != null || voicePath != null)
+        (note.isNotBlank() || photos.isNotEmpty() || musicPath != null || voicePath != null)
 
     fun save() {
         val now = System.currentTimeMillis()
@@ -134,7 +134,7 @@ fun AddBlockDialog(
                 note = note.trim(),
                 createdAt = now,
                 colorArgb = blockPalette[(now % blockPalette.size).toInt()],
-                photoPath = photoPath,
+                photos = photos,
                 musicPath = musicPath,
                 voicePath = voicePath,
             ),
@@ -161,19 +161,21 @@ fun AddBlockDialog(
                 Text(
                     text = "новый момент",
                     fontFamily = NoteFont,
-                    fontSize = 24.sp,
+                    fontSize = 26.sp,
                     color = AvColors.Ink,
                 )
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(
-                        selected = photoPath != null,
+                        selected = photos.isNotEmpty(),
                         onClick = {
                             photoPicker.launch(
                                 PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
                             )
                         },
-                        label = { Text(if (photoPath != null) "фото ✓" else "фото") },
+                        label = {
+                            Text(if (photos.isNotEmpty()) "фото ✓ (${photos.size})" else "фото")
+                        },
                     )
                     FilterChip(
                         selected = musicPath != null,
@@ -203,11 +205,11 @@ fun AddBlockDialog(
                     onValueChange = { note = it },
                     label = { Text("подпись") },
                     modifier = Modifier.fillMaxWidth(),
-                    textStyle = TextStyle(fontFamily = NoteFont, fontSize = 16.sp),
+                    textStyle = TextStyle(fontFamily = NoteFont, fontSize = 18.sp),
                 )
 
                 if (busy) {
-                    Text(text = "сохраняю файл…", color = AvColors.InkSoft)
+                    Text(text = "сохраняю файлы…", color = AvColors.InkSoft)
                 }
 
                 Row(

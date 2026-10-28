@@ -5,6 +5,7 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
@@ -45,24 +47,30 @@ import java.util.Locale
 fun FeedScreen(
     blocks: List<Block>,
     player: AudioPlayer,
+    onOpenPhotos: (Block) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     LazyVerticalStaggeredGrid(
         columns = StaggeredGridCells.Fixed(2),
-        modifier = modifier.background(AvColors.Paper),
-        // Большой отступ снизу, чтобы кнопка «+» не закрывала последние блоки.
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 120.dp),
+        modifier = modifier,
+        // Большой отступ снизу, чтобы нижние кнопки не закрывали последние блоки.
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 130.dp),
         verticalItemSpacing = 16.dp,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         itemsIndexed(blocks, key = { _, block -> block.id }) { index, block ->
-            BlockCard(block = block, index = index, player = player)
+            BlockCard(block = block, index = index, player = player, onOpenPhotos = onOpenPhotos)
         }
     }
 }
 
 @Composable
-fun BlockCard(block: Block, index: Int, player: AudioPlayer) {
+fun BlockCard(
+    block: Block,
+    index: Int,
+    player: AudioPlayer,
+    onOpenPhotos: (Block) -> Unit,
+) {
     // «Порядок в беспорядке»: наклон фиксируется по id, карточки не прыгают при прокрутке.
     val tilt = remember(block.id) { ((block.id * 37L) % 7L).toFloat() - 3f }
 
@@ -95,22 +103,22 @@ fun BlockCard(block: Block, index: Int, player: AudioPlayer) {
         shadowElevation = 3.dp,
     ) {
         Column(modifier = Modifier.padding(8.dp)) {
-            val photo = block.photoPath
-            if (photo != null) {
-                LocalPhoto(
-                    path = photo,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(4.dp)),
-                )
-            } else {
-                // Без фото — цветной «стикер».
-                Box(
+            val photos = block.photos
+            when {
+                photos.isEmpty() -> Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(44.dp)
                         .background(Color(block.colorArgb), RoundedCornerShape(4.dp)),
                 )
+                photos.size == 1 -> LocalPhoto(
+                    path = photos.first(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(4.dp))
+                        .clickable { onOpenPhotos(block) },
+                )
+                else -> PhotoPile(photos = photos, onClick = { onOpenPhotos(block) })
             }
 
             if (block.note.isNotBlank()) {
@@ -118,7 +126,7 @@ fun BlockCard(block: Block, index: Int, player: AudioPlayer) {
                     text = block.note,
                     modifier = Modifier.padding(top = 8.dp, start = 4.dp, end = 4.dp),
                     fontFamily = NoteFont,
-                    fontSize = 16.sp,
+                    fontSize = 19.sp,
                     color = AvColors.Ink,
                 )
             }
@@ -159,5 +167,44 @@ fun BlockCard(block: Block, index: Int, player: AudioPlayer) {
                 color = AvColors.InkSoft,
             )
         }
+    }
+}
+
+/** Несколько фото в одном блоке: стопка из двух, с бейджем количества. */
+@Composable
+private fun PhotoPile(photos: List<String>, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(bottom = 6.dp, end = 6.dp),
+    ) {
+        LocalPhoto(
+            path = photos[1],
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .fillMaxWidth(0.9f)
+                .graphicsLayer { rotationZ = 4f }
+                .clip(RoundedCornerShape(4.dp)),
+        )
+        LocalPhoto(
+            path = photos[0],
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .fillMaxWidth(0.9f)
+                .graphicsLayer { rotationZ = -3f }
+                .clip(RoundedCornerShape(4.dp)),
+        )
+        Text(
+            text = "${photos.size} фото",
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(4.dp)
+                .clip(CircleShape)
+                .background(Color.White.copy(alpha = 0.9f))
+                .padding(horizontal = 8.dp, vertical = 2.dp),
+            style = MaterialTheme.typography.labelSmall,
+            color = AvColors.Ink,
+        )
     }
 }

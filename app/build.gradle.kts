@@ -1,7 +1,15 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
+}
+
+// Пароли ключа подписи лежат в signing.properties (в корне проекта).
+val signingProps = Properties().apply {
+    val f = rootProject.file("signing.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
 }
 
 android {
@@ -12,12 +20,28 @@ android {
         applicationId = "com.avmemori"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.2.0"
+        // Увеличивайте versionCode при каждом обновлении: иначе Android не поставит APK поверх.
+        versionCode = 3
+        versionName = "0.3.0"
+    }
+
+    // Постоянный ключ подписи: все сборки подписаны одним ключом,
+    // поэтому обновления ставятся поверх без удаления приложения.
+    signingConfigs {
+        create("release") {
+            storeFile = rootProject.file(signingProps.getProperty("storeFile", "keystore/av_memori.jks"))
+            storePassword = signingProps.getProperty("storePassword")
+            keyAlias = signingProps.getProperty("keyAlias", "avmemori")
+            keyPassword = signingProps.getProperty("keyPassword")
+        }
     }
 
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("release")
+        }
         release {
+            signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -46,6 +70,7 @@ dependencies {
 
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.activity:activity-compose:1.9.2")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.6")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.foundation:foundation")
