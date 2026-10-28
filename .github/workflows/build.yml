@@ -19,10 +19,16 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Accept Android SDK licenses and install platform
+      - name: Install Android platform 35 (if missing)
         run: |
-          yes | sdkmanager --licenses > /dev/null || true
-          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+          SDK="${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}"
+          SDKMANAGER=$(find "$SDK/cmdline-tools" -path '*/bin/sdkmanager' | head -n 1)
+          if [ -z "$SDKMANAGER" ]; then
+            echo "sdkmanager not found, relying on preinstalled SDK"
+            exit 0
+          fi
+          yes | "$SDKMANAGER" --sdk_root="$SDK" --licenses > /dev/null || true
+          "$SDKMANAGER" --sdk_root="$SDK" "platforms;android-35" "build-tools;35.0.0"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
