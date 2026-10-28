@@ -37,13 +37,25 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.res.imageResource
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.awaitPointerEvent
+import androidx.compose.ui.input.pointer.awaitPointerEventScope
+import kotlin.math.abs
+import kotlin.math.floor
+import kotlin.math.roundToInt
 import kotlin.math.sin
 import com.avmemori.ui.theme.AvColors
 import com.avmemori.ui.theme.BodyFont
@@ -174,47 +186,82 @@ fun SettingsScreen(
 
         Spacer(modifier = Modifier.size(8.dp))
 
-        // Нажал или приблизил фото — оно гличит, и на секунду появляется логотип AV.
+        // Тап или приближение: фото рвётся на горизонтальные полосы, на секунду появляется логотип AV.
+        // Жесты не перехватывают движение пальца, поэтому страницу можно листать во время глитча.
         val glitch = remember { Animatable(1f) }
         val scope = rememberCoroutineScope()
         val trigger: () -> Unit = {
-            scope.launch {
-                glitch.snapTo(0f)
-                glitch.animateTo(1f, tween(durationMillis = 900, easing = LinearEasing))
+            if (glitch.value > 0.99f) {
+                scope.launch {
+                    glitch.snapTo(0f)
+                    glitch.animateTo(1f, tween(durationMillis = 900, easing = LinearEasing))
+                }
             }
         }
-        Box(
+        val photo = ImageBitmap.imageResource(R.drawable.settings_photo)
+        val logo = ImageBitmap.imageResource(R.drawable.av_logo)
+        Canvas(
             modifier = Modifier
                 .fillMaxWidth()
+                .aspectRatio(photo.width.toFloat() / photo.height)
                 .clip(RoundedCornerShape(18.dp))
-                .pointerInput(Unit) { detectTapGestures(onPress = { trigger() }) }
+                .pointerInput(Unit) { detectTapGestures(onTap = { trigger() }) }
                 .pointerInput(Unit) {
-                    detectTransformGestures { _, _, zoom, _ -> if (zoom != 1f) trigger() }
+                    // Наблюдаем за вторым пальцем без потребления событий: прокрутка остаётся рабочей.
+                    awaitPointerEventScope {
+                        var lastSpread = 0f
+                        while (true) {
+                            val event = awaitPointerEvent(PointerEventPass.Initial)
+                            val pressed = event.changes.filter { it.pressed }
+                            if (pressed.size >= 2) {
+                                val spread = (pressed[0].position - pressed[1].position).getDistance()
+                                if (lastSpread > 0f && abs(spread - lastSpread) > 12f) trigger()
+                                lastSpread = spread
+                            } else {
+                                lastSpread = 0f
+                            }
+                        }
+                    }
                 },
         ) {
             val t = glitch.value
             val k = 1f - t
-            Image(
-                painter = painterResource(R.drawable.settings_photo),
-                contentDescription = null,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .graphicsLayer {
-                        translationX = if (k > 0f) sin(t * 70f) * 12f * k else 0f
-                        alpha = if (k > 0f && sin(t * 110f) > 0.5f) 0.6f else 1f
-                    },
-                contentScale = ContentScale.FillWidth,
-            )
-            Image(
-                painter = painterResource(R.drawable.av_logo),
-                contentDescription = null,
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .fillMaxWidth(0.6f)
-                    .clip(RoundedCornerShape(12.dp))
-                    .graphicsLayer { alpha = logoAlpha(t) },
-                contentScale = ContentScale.Fit,
-            )
+            val w = size.width
+            val h = size.height
+            if (k <= 0.001f) {
+                drawImage(image = photo, dstSize = IntSize(w.roundToInt(), h.roundToInt()))
+            } else {
+                // Полосы смещаются по случайным правилам, которые меняются каждый кадр.
+                val frame = (t * 24f).toInt()
+                val bands = 9
+                val bandH = h / bands
+                for (b in 0 until bands) {
+                    val shift = glitchHash(b, frame)
+                    val dx = if (shift > 0.55f) (glitchHash(b + 50, frame) - 0.5f) * w * 0.14f * k else 0f
+                    val top = b * bandH
+                    val srcTop = (top / h * photo.height).roundToInt()
+                    val srcH = (bandH / h * photo.height).roundToInt().coerceAtLeast(1)
+                    drawImage(
+                        image = photo,
+                        srcOffset = IntOffset(0, srcTop),
+                        srcSize = IntSize(photo.width, srcH),
+                        dstOffset = IntOffset(dx.roundToInt(), top.roundToInt()),
+                        dstSize = IntSize(w.roundToInt(), bandH.roundToInt() + 1),
+                    )
+                }
+            }
+            val la = logoAlpha(t)
+            if (la > 0f) {
+                val lw = w * 0.5f
+                val lh = lw * logo.height / logo.width
+                drawImage(
+                    image = logo,
+                    dstOffset = IntOffset(((w - lw) / 2f).roundToInt(), ((h - lh) / 2f).roundToInt()),
+                    dstSize = IntSize(lw.roundToInt(), lh.roundToInt()),
+                    alpha = la,
+                    colorFilter = ColorFilter.tint(AvColors.Ink),
+                )
+            }
         }
         Text(
             text = "с любовью AV_memori",
@@ -225,6 +272,12 @@ fun SettingsScreen(
             textAlign = TextAlign.Center,
         )
     }
+}
+
+/** Псевдослучайное число 0..1 для полос глитча: одинаковые входы дают одинаковый результат. */
+private fun glitchHash(a: Int, b: Int): Float {
+    val x = sin(a * 12.9898f + b * 78.233f) * 43758.5453f
+    return x - floor(x)
 }
 
 /** Логотип: появляется на вспышке глитча и гаснет к концу. t = 1 — покой. */
