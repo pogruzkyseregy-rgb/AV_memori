@@ -6,7 +6,8 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -19,9 +20,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.key
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -54,15 +55,16 @@ import kotlin.random.Random
 /** Что показываем в разлёте: медиа блока или момента и зерно случайности. */
 data class Viewer(val media: List<Media>, val seed: Long)
 
-/** Место фото на экране до сдвига пальцем: центр и небольшой наклон. */
+/** Место фото до жестов пальцем: центр и небольшой наклон. */
 private data class Spot(val target: Offset, val angle: Float)
 
+/** Жесты пальцем: сдвиг, увеличение и поворот (в градусах). */
+private data class Pose(val offset: Offset = Offset.Zero, val scale: Float = 1f, val rotation: Float = 0f)
+
 /**
- * Фото и видео из блока разлетаются по экрану веером, их можно таскать пальцем.
- * Тап по видео открывает проигрыватель. Закрывается крестиком или «назад».
- *
- * Положение каждого фото считается прямо при отрисовке (по seed и размеру экрана),
- * без отдельных фоновых эффектов, поэтому стопка всегда раскладывается.
+ * Фото и видео из блока разлетаются по экрану веером.
+ * Фото можно таскать, увеличивать щипком и крутить двумя пальцами.
+ * Тап по фото открывает его на весь экран, тап по видео — проигрыватель.
  */
 @Composable
 fun PhotoScatter(
@@ -71,14 +73,16 @@ fun PhotoScatter(
     onClose: () -> Unit,
     onOpenVideo: (Media) -> Unit,
 ) {
-    BackHandler(onBack = onClose)
+    // Полноэкранное фото открыто — «назад» закрывает его, а не всю россыпь.
+    var fullPhoto by remember(seed) { mutableStateOf<Media?>(null) }
+    BackHandler(enabled = fullPhoto == null, onBack = onClose)
 
     val density = LocalDensity.current
     var areaPx by remember { mutableStateOf(IntSize.Zero) }
 
-    // Сдвиги, которые фото получили пальцем (поверх разлёта).
-    val dragOffsets = remember(seed) { mutableStateMapOf<Int, Offset>() }
-    // Порядок отрисовки: последний — сверху. Тронутое фото поднимается наверх.
+    // Жесты каждого фото: сдвиг, масштаб и поворот.
+    val poses = remember(seed) { mutableStateMapOf<Int, Pose>() }
+    // Порядок наложения: последний — сверху. Тронутое фото поднимается наверх.
     val order = remember(seed) { mutableStateListOf<Int>().apply { addAll(media.indices) } }
     // 0 — все фото в стопке в центре, 1 — разлетелись.
     val progress = remember(seed) { Animatable(0f) }
@@ -120,13 +124,12 @@ fun PhotoScatter(
             val itemHdp = with(density) { itemH.toDp() }
 
             // Каждое фото — свой постоянный узел (key), порядок наложения задаёт zIndex.
-            // Раньше порядок менялся перестановкой детей, и жест сбрасывался — отсюда дёрганье.
             media.indices.forEach { i ->
                 key(i) {
                     val spot = spots[i]
-                    val drag = dragOffsets[i] ?: Offset.Zero
-                    val x = startX + (spot.target.x + drag.x - startX) * t
-                    val y = startY + (spot.target.y + drag.y - startY) * t
+                    val pose = poses[i] ?: Pose()
+                    val x = startX + (spot.target.x + pose.offset.x - startX) * t
+                    val y = startY + (spot.target.y + pose.offset.y - startY) * t
                     val item = media[i]
                     val layer = order.indexOf(i).toFloat()
 
@@ -135,20 +138,32 @@ fun PhotoScatter(
                             .zIndex(layer)
                             .offset { IntOffset(x.roundToInt(), y.roundToInt()) }
                             .size(itemWdp, itemHdp)
-                            .graphicsLayer { rotationZ = spot.angle * t }
+                            .graphicsLayer {
+                                rotationZ = spot.angle * t + pose.rotation
+                                scaleX = pose.scale
+                                scaleY = pose.scale
+                            }
                             .pointerInput(Unit) {
-                                detectDragGestures(
-                                    onDragStart = {
+                                detectTransformGestures { _, pan, zoom, rotation ->
+                                    val p = poses[i] ?: Pose()
+                                    poses[i] = p.copy(
+                                        offset = p.offset + pan,
+                                        scale = (p.scale * zoom).coerceIn(0.5f, 3f),
+                                        rotation = p.rotation + rotation,
+                                    )
+                                }
+                            }
+                            .pointerInput(Unit) {
+                                detectTapGestures(
+                                    onPress = { _ ->
                                         order.remove(i)
                                         order.add(i)
                                     },
-                                    onDrag = { change, delta ->
-                                        change.consume()
-                                        dragOffsets[i] = (dragOffsets[i] ?: Offset.Zero) + delta
+                                    onTap = { _ ->
+                                        if (item.isVideo) onOpenVideo(item) else fullPhoto = item
                                     },
                                 )
-                            }
-                            .then(if (item.isVideo) Modifier.clickable { onOpenVideo(item) } else Modifier),
+                            },
                         shape = RoundedCornerShape(4.dp),
                         color = Color.White,
                         shadowElevation = 8.dp,
@@ -182,7 +197,7 @@ fun PhotoScatter(
         }
 
         Text(
-            text = "тяни, как хочешь",
+            text = "тяни, крути, увеличивай",
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .navigationBarsPadding()
@@ -191,5 +206,9 @@ fun PhotoScatter(
             fontSize = 20.sp,
             color = AvColors.InkSoft,
         )
+
+        fullPhoto?.let { photo ->
+            FullPhotoView(path = photo.path, onClose = { fullPhoto = null })
+        }
     }
 }

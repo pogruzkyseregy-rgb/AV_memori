@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -20,6 +22,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.avmemori.ui.theme.AvColors
 
 /** Полноэкранный проигрыватель видео со стандартным управлением. */
@@ -27,11 +32,29 @@ import com.avmemori.ui.theme.AvColors
 fun VideoPlayer(path: String, onClose: () -> Unit) {
     BackHandler(onBack = onClose)
 
+    val lifecycleOwner = LocalLifecycleOwner.current
+    // Держим ссылку на плеер, чтобы остановить его при уходе в фон.
+    val holder = remember { arrayOfNulls<VideoView>(1) }
+
+    // Видео не должно играть, когда приложение свернули: звук и картинка останавливаются.
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) holder[0]?.stopPlayback()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            holder[0]?.stopPlayback()
+            holder[0] = null
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
         AndroidView(
             modifier = Modifier.fillMaxSize(),
             factory = { ctx ->
                 VideoView(ctx).also { view ->
+                    holder[0] = view
                     view.setMediaController(MediaController(ctx).also { it.setAnchorView(view) })
                     view.setVideoPath(path)
                     view.setOnPreparedListener { player -> player.start() }

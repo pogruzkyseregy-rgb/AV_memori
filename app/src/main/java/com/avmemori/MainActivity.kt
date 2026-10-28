@@ -304,15 +304,9 @@ private fun Header(
             .padding(start = 20.dp, end = 16.dp, top = 12.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Image(
-            painter = painterResource(R.drawable.logo_fox),
-            contentDescription = null,
-            modifier = Modifier.size(44.dp),
-        )
         Column(
             modifier = Modifier
                 .weight(1f)
-                .padding(start = 12.dp)
                 .clickable(onClick = onNameClick),
         ) {
             Text(
