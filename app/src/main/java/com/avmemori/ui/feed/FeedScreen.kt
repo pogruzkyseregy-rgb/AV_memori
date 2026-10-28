@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridLayoutInfo
@@ -44,6 +46,9 @@ import androidx.compose.ui.unit.sp
 import com.avmemori.audio.AudioPlayer
 import com.avmemori.model.Block
 import com.avmemori.model.Sticker
+import com.avmemori.ui.common.EditIcon
+import com.avmemori.ui.common.IconTap
+import com.avmemori.ui.common.ShareIcon
 import com.avmemori.ui.media.MediaArea
 import com.avmemori.util.Share
 import com.avmemori.ui.media.StickerLayer
@@ -242,26 +247,11 @@ fun BlockCard(
                     color = AvColors.InkSoft,
                     modifier = Modifier.weight(1f),
                 )
-                Text(
-                    text = "поделиться",
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .clickable {
-                            Share.shareMedia(context, block.media, block.note.takeIf { it.isNotBlank() })
-                        }
-                        .padding(horizontal = 6.dp, vertical = 2.dp),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = AvColors.InkSoft,
-                )
-                Text(
-                    text = "изменить",
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .clickable { onEdit(block) }
-                        .padding(horizontal = 6.dp, vertical = 2.dp),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = AvColors.InkSoft,
-                )
+                IconTap(description = "поделиться", onClick = {
+                    Share.shareMedia(context, block.media, block.note.takeIf { it.isNotBlank() })
+                }) { ShareIcon() }
+                Spacer(modifier = Modifier.width(4.dp))
+                IconTap(description = "изменить", onClick = { onEdit(block) }) { EditIcon() }
             }
         }
     }
