@@ -3,6 +3,7 @@ package com.avmemori.ui.settings
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -16,7 +17,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Switch
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -29,19 +30,20 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.avmemori.R
+import com.avmemori.model.BackgroundStyle
 import com.avmemori.ui.theme.AvColors
 import com.avmemori.ui.theme.BodyFont
 import com.avmemori.ui.theme.NoteFont
 
 /**
- * Настройки: логотип сверху, переключатели и имя, внизу фото с подписью.
+ * Настройки: логотип сверху, имя и выбор фона, внизу фото с подписью.
  */
 @Composable
 fun SettingsScreen(
     babyName: String,
-    animated: Boolean,
+    style: BackgroundStyle,
     onRename: () -> Unit,
-    onAnimatedChange: (Boolean) -> Unit,
+    onStyleChange: (BackgroundStyle) -> Unit,
     onBack: () -> Unit,
 ) {
     Column(
@@ -89,11 +91,29 @@ fun SettingsScreen(
                 value = babyName.ifBlank { "не задано" },
                 onClick = onRename,
             )
-            SettingSwitchRow(
-                title = "анимированный фон",
-                checked = animated,
-                onChange = onAnimatedChange,
-            )
+        }
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(18.dp))
+                .background(Color.White)
+                .padding(horizontal = 18.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(text = "анимированный фон", fontFamily = BodyFont, fontSize = 16.sp, color = AvColors.Ink)
+            Row(
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                BackgroundStyle.values().forEach { option ->
+                    FilterChip(
+                        selected = option == style,
+                        onClick = { onStyleChange(option) },
+                        label = { Text(option.title) },
+                    )
+                }
+            }
         }
 
         Spacer(modifier = Modifier.size(8.dp))
@@ -129,19 +149,5 @@ private fun SettingRow(title: String, value: String, onClick: () -> Unit) {
         Text(text = title, fontFamily = BodyFont, fontSize = 16.sp, color = AvColors.Ink)
         Spacer(modifier = Modifier.weight(1f))
         Text(text = value, fontFamily = NoteFont, fontSize = 20.sp, color = AvColors.InkSoft)
-    }
-}
-
-@Composable
-private fun SettingSwitchRow(title: String, checked: Boolean, onChange: (Boolean) -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 18.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(text = title, fontFamily = BodyFont, fontSize = 16.sp, color = AvColors.Ink)
-        Spacer(modifier = Modifier.weight(1f))
-        Switch(checked = checked, onCheckedChange = onChange)
     }
 }

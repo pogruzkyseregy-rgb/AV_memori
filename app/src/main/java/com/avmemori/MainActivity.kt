@@ -90,7 +90,7 @@ fun AvApp() {
     val player = remember { AudioPlayer() }
 
     var babyName by remember { mutableStateOf(BabyPrefs.getName(context)) }
-    var animated by remember { mutableStateOf(BabyPrefs.isAnimatedBackground(context)) }
+    var bgStyle by remember { mutableStateOf(BabyPrefs.getBackgroundStyle(context)) }
     var blocks by remember { mutableStateOf(BlockStore.load(context)) }
     var milestones by remember { mutableStateOf(MilestoneStore.load(context)) }
     var stickers by remember { mutableStateOf(StickerStore.load(context)) }
@@ -134,7 +134,7 @@ fun AvApp() {
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        AnimatedBackground(enabled = animated)
+        AnimatedBackground(style = bgStyle)
 
         when (screen) {
             Screen.MAIN -> Column(modifier = Modifier.fillMaxSize()) {
@@ -190,11 +190,11 @@ fun AvApp() {
 
             Screen.SETTINGS -> SettingsScreen(
                 babyName = babyName,
-                animated = animated,
+                style = bgStyle,
                 onRename = { showName = true },
-                onAnimatedChange = { enabled ->
-                    animated = enabled
-                    BabyPrefs.setAnimatedBackground(context, enabled)
+                onStyleChange = { newStyle ->
+                    bgStyle = newStyle
+                    BabyPrefs.setBackgroundStyle(context, newStyle)
                 },
                 onBack = { screen = Screen.MAIN },
             )

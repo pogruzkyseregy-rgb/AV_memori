@@ -22,6 +22,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -51,9 +52,15 @@ import kotlin.random.Random
 /** Что показываем в разлёте: медиа блока или момента и зерно случайности. */
 data class Viewer(val media: List<Media>, val seed: Long)
 
+/** Место фото на экране до сдвига пальцем: центр и небольшой наклон. */
+private data class Spot(val target: Offset, val angle: Float)
+
 /**
- * Фото и видео из блока разлетаются по экрану, их можно таскать пальцем.
+ * Фото и видео из блока разлетаются по экрану веером, их можно таскать пальцем.
  * Тап по видео открывает проигрыватель. Закрывается крестиком или «назад».
+ *
+ * Положение каждого фото считается прямо при отрисовке (по seed и размеру экрана),
+ * без отдельных фоновых эффектов, поэтому стопка всегда раскладывается.
  */
 @Composable
 fun PhotoScatter(
@@ -67,28 +74,14 @@ fun PhotoScatter(
     val density = LocalDensity.current
     var areaPx by remember { mutableStateOf(IntSize.Zero) }
 
-    // Анимация «разлёта» от центра: 0 — все в стопке, 1 — разбросаны.
+    // Сдвиги, которые фото получили пальцем (поверх разлёта).
+    val dragOffsets = remember(seed) { mutableStateMapOf<Int, Offset>() }
+    // Порядок отрисовки: последний — сверху. Тронутое фото поднимается наверх.
+    val order = remember(seed) { mutableStateListOf<Int>().apply { addAll(media.indices) } }
+    // 0 — все фото в стопке в центре, 1 — разлетелись.
     val progress = remember(seed) { Animatable(0f) }
-    // Целевые позиции (px), углы и порядок отрисовки (последний — сверху).
-    val targets = remember(seed) { mutableStateListOf<Offset>() }
-    val angles = remember(seed) { mutableStateListOf<Float>() }
-    val order = remember(seed) { mutableStateListOf<Int>() }
 
-    val itemWidthPx = areaPx.width * 0.42f
-    val itemHeightPx = itemWidthPx * 1.25f
-    val topMarginPx = with(density) { 84.dp.toPx() }
-    val bottomMarginPx = with(density) { 90.dp.toPx() }
-
-    LaunchedEffect(areaPx) {
-        if (areaPx == IntSize.Zero || targets.isNotEmpty()) return@LaunchedEffect
-        val rnd = Random(seed)
-        val maxX = (areaPx.width - itemWidthPx).coerceAtLeast(0f)
-        val maxY = (areaPx.height - topMarginPx - bottomMarginPx - itemHeightPx).coerceAtLeast(0f)
-        media.indices.forEach { i ->
-            targets.add(Offset(rnd.nextFloat() * maxX, topMarginPx + rnd.nextFloat() * maxY))
-            angles.add(rnd.nextFloat() * 24f - 12f)
-            order.add(i)
-        }
+    LaunchedEffect(seed) {
         progress.animateTo(1f, tween(durationMillis = 900, easing = FastOutSlowInEasing))
     }
 
@@ -98,36 +91,57 @@ fun PhotoScatter(
             .background(AvColors.Paper.copy(alpha = 0.97f))
             .onSizeChanged { areaPx = it },
     ) {
-        if (targets.size == media.size && areaPx != IntSize.Zero) {
+        if (areaPx != IntSize.Zero) {
+            val w = areaPx.width.toFloat()
+            val h = areaPx.height.toFloat()
+            val itemW = w * 0.42f
+            val itemH = itemW * 1.25f
+            val topM = with(density) { 84.dp.toPx() }
+            val bottomM = with(density) { 90.dp.toPx() }
+
+            val spots = remember(seed, areaPx) {
+                val rnd = Random(seed)
+                val maxX = (w - itemW).coerceAtLeast(0f)
+                val maxY = (h - topM - bottomM - itemH).coerceAtLeast(0f)
+                List(media.size) {
+                    Spot(
+                        target = Offset(rnd.nextFloat() * maxX, topM + rnd.nextFloat() * maxY),
+                        angle = rnd.nextFloat() * 24f - 12f,
+                    )
+                }
+            }
+
             val t = progress.value
-            val startX = (areaPx.width - itemWidthPx) / 2f
-            val startY = (areaPx.height - itemHeightPx) / 2f
-            val itemW = with(density) { itemWidthPx.toDp() }
-            val itemH = with(density) { itemHeightPx.toDp() }
+            val startX = (w - itemW) / 2f
+            val startY = (h - itemH) / 2f
+            val itemWdp = with(density) { itemW.toDp() }
+            val itemHdp = with(density) { itemH.toDp() }
 
             order.toList().forEach { i ->
-                val target = targets[i]
-                val x = startX + (target.x - startX) * t
-                val y = startY + (target.y - startY) * t
+                val spot = spots[i]
+                val drag = dragOffsets[i] ?: Offset.Zero
+                val x = startX + (spot.target.x + drag.x - startX) * t
+                val y = startY + (spot.target.y + drag.y - startY) * t
                 val item = media[i]
+
                 Surface(
                     modifier = Modifier
                         .offset { IntOffset(x.roundToInt(), y.roundToInt()) }
-                        .size(itemW, itemH)
-                        .graphicsLayer { rotationZ = angles[i] * t }
+                        .size(itemWdp, itemHdp)
+                        .graphicsLayer { rotationZ = spot.angle * t }
                         .pointerInput(i) {
                             detectDragGestures(
                                 onDragStart = {
                                     order.remove(i)
                                     order.add(i)
                                 },
-                                onDrag = { change, drag ->
+                                onDrag = { change, delta ->
                                     change.consume()
-                                    targets[i] = targets[i] + drag
+                                    dragOffsets[i] = (dragOffsets[i] ?: Offset.Zero) + delta
                                 },
                             )
                         }
-                        .clickable(enabled = item.isVideo) { onOpenVideo(item) },
+                        .then(if (item.isVideo) Modifier.clickable { onOpenVideo(item) } else Modifier),
                     shape = RoundedCornerShape(4.dp),
                     color = Color.White,
                     shadowElevation = 8.dp,
